@@ -44,7 +44,10 @@ CPMAddPackage(
   GIT_REPOSITORY "https://github.com/saucer/saucer"
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE saucer::saucer)
+saucer_embed("frontend/dist")
+target_link_libraries(${PROJECT_NAME} PRIVATE saucer::saucer saucer::embedded)
+
+
 
 
 
