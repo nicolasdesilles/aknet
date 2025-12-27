@@ -17,6 +17,9 @@ coco::stray start(saucer::application *app)
 
     window->set_title("aknet");
 
+    // Binding test function
+    webview->expose("log_test_msg", aknet::core::test_function);
+
     webview->embed(saucer::embedded::all());
     webview->serve("/index.html");
 
