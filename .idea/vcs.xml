@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/coco-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/ereignis-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/flagpp-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/functional-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/glaze-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/lockpp-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/packageproject-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/polo-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/range-v3-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/range-v3-src/doc/gh-pages" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/rebind-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/saucer-embed-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/saucer-fill-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/saucer-src" vcs="Git" />
+  </component>
+</project>
