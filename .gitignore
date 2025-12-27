@@ -1,8 +1,5 @@
 # CMake build directories
 /build/
-/build-*/
-/cmake-build-*/
-/out/
 /bin/
 /lib/
 
@@ -59,18 +56,18 @@ rules.ninja
 embedded
 
 # Vite + React + TypeScript (frontend)
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
-frontend/.cache/
-frontend/coverage/
-frontend/.env
-frontend/.env.*
-!frontend/.env.example
+src/ui/node_modules/
+src/ui/dist/
+src/ui/.vite/
+src/ui/.cache/
+src/ui/coverage/
+src/ui/.env
+src/ui/.env.*
+!src/ui/.env.example
 
 # Logs
-frontend/npm-debug.log*
-frontend/yarn-debug.log*
-frontend/yarn-error.log*
-frontend/pnpm-debug.log*
-frontend/lerna-debug.log*
+src/ui/npm-debug.log*
+src/ui/yarn-debug.log*
+src/ui/yarn-error.log*
+src/ui/pnpm-debug.log*
+src/ui/lerna-debug.log*

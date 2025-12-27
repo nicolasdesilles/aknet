@@ -2,6 +2,7 @@
 #include <print>
 #include <saucer/smartview.hpp>
 #include <saucer/embedded/all.hpp>
+#include <core.h>
 
 coco::stray start(saucer::application *app)
 {
@@ -16,6 +17,7 @@ coco::stray start(saucer::application *app)
 
     window->show();
 
+    aknet::core::test_function();
 
     co_await app->finish();
 }

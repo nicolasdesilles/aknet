@@ -1,51 +1,71 @@
 cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
 
-
 # Create the project
 project(aknet LANGUAGES CXX VERSION 0.1.0)
 
 # --------------------------------------------------------------------------------------------------------
-# CPM.make
+# C++ Standard
 # --------------------------------------------------------------------------------------------------------
 
-# Download CPM.cmake
-file(
-  DOWNLOAD
-  https://github.com/cpm-cmake/CPM.cmake/releases/download/v0.40.8/CPM.cmake
-  ${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake
-  EXPECTED_HASH SHA256=78ba32abdf798bc616bab7c73aac32a17bbd7b06ad9e26a6add69de8f3ae4791
-)
+# C++23 Standard
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Include CPM.cmake
-include(${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake)
+# --------------------------------------------------------------------------------------------------------
+# Output Directories and CMake Helpers
+# --------------------------------------------------------------------------------------------------------
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+# Include CMake helpers
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+include(CompilerOptions)
+include(Dependencies)
+
+# --------------------------------------------------------------------------------------------------------
+# Subdirectories
+# --------------------------------------------------------------------------------------------------------
+
+# Core library
+add_subdirectory(src/core)
+
+# Modules
+add_subdirectory(src/modules/logger)
 
 # --------------------------------------------------------------------------------------------------------
 # Create executable
 # --------------------------------------------------------------------------------------------------------
 
-set(CMAKE_BUILD_TYPE Debug)
+if(APPLE)
 
-add_executable(${PROJECT_NAME})
+    set(CMAKE_BUILD_TYPE Debug)
 
-target_sources(${PROJECT_NAME} PRIVATE
-  src/main.cpp
-)
+    add_executable(${PROJECT_NAME}
+            src/main.cpp
+    )
 
-target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
-set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 23 CXX_EXTENSIONS OFF CXX_STANDARD_REQUIRED ON)
+    target_link_libraries(aknet
+            PRIVATE
+                aknet_core
+                # aknet_logger
+                saucer::saucer
+                saucer::embedded
+    )
+
+    target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
+    set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 23 CXX_EXTENSIONS OFF CXX_STANDARD_REQUIRED ON)
+else ()
+    message(FATAL_ERROR "Only building on/for macOS is supported for now. Exiting.")
+endif()
 
 # --------------------------------------------------------------------------------------------------------
-# Add and link libraries
+# Saucer Embed
 # --------------------------------------------------------------------------------------------------------
 
-CPMAddPackage(
-  NAME           saucer
-  VERSION        7.0.2
-  GIT_REPOSITORY "https://github.com/saucer/saucer"
-)
-
-saucer_embed("frontend/dist")
-target_link_libraries(${PROJECT_NAME} PRIVATE saucer::saucer saucer::embedded)
+saucer_embed("src/ui/dist")
 
 
 
