@@ -3,6 +3,13 @@ cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
 # Create the project
 project(aknet LANGUAGES CXX VERSION 0.1.0)
 
+# For reference in C++ code via template header file in core lib
+set (PROJECT_VERSION ${CMAKE_PROJECT_VERSION})
+set (PROJECT_NAME ${CMAKE_PROJECT_NAME})
+string(TIMESTAMP TODAY "%d/%m/%Y")
+set (PROJECT_BUILD_DATE ${TODAY})
+set (PROJECT_AUTHOR "Nicolas Désilles @laplanque")
+
 # --------------------------------------------------------------------------------------------------------
 # C++ Standard
 # --------------------------------------------------------------------------------------------------------
@@ -49,10 +56,10 @@ if(APPLE)
 
     target_link_libraries(aknet
             PRIVATE
-                aknet_core
-                # aknet_logger
-                saucer::saucer
-                saucer::embedded
+            aknet_core
+            aknet_logger
+            saucer::saucer
+            saucer::embedded
     )
 
     target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)

@@ -24,3 +24,13 @@ CPMAddPackage(
         VERSION        7.0.2
         GIT_REPOSITORY "https://github.com/saucer/saucer"
 )
+
+# --------------------------------------------------------------------------------------------------------
+# spdlog
+# --------------------------------------------------------------------------------------------------------
+
+CPMAddPackage(
+        NAME           spdlog
+        VERSION        1.16.0
+        GIT_REPOSITORY "https://github.com/gabime/spdlog"
+)

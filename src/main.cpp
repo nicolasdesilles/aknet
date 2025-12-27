@@ -4,8 +4,13 @@
 #include <saucer/embedded/all.hpp>
 #include <core.h>
 
+static aknet::core g_core;
+
 coco::stray start(saucer::application *app)
 {
+    // Initialize the aknet core before anything else
+    g_core.init();
+
     auto window  = saucer::window::create(app).value();
     auto webview = saucer::smartview<>::create({.window = window});
 
@@ -17,9 +22,13 @@ coco::stray start(saucer::application *app)
 
     window->show();
 
+    // Test code
     aknet::core::test_function();
 
     co_await app->finish();
+
+    // Clean shutdown by stopping the aknet core
+    g_core.shutdown();
 }
 
 int main()
