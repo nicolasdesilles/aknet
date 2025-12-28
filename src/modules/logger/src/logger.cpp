@@ -12,20 +12,22 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 
-namespace aknet::logger {
+namespace fs = std::filesystem;
 
-    static std::shared_ptr<spdlog::logger> g_logger;
+static std::shared_ptr<spdlog::logger> g_logger;
+
+namespace aknet::logger {
 
     // ------------------------------------------------------------------------------------------------
     // Private
     // ------------------------------------------------------------------------------------------------
 
     // Default logs directory
-    std::filesystem::path logger::default_macos_log_dir() {
+    fs::path logger::default_macos_log_dir() {
 
         const char* home = std::getenv("HOME");
-        if (!home) return std::filesystem::current_path() / "logs";
-        return std::filesystem::path(home) / "Desktop" / "Logs" / "aknet";
+        if (!home) return fs::current_path() / "logs";
+        return fs::path(home) / "Desktop" / "Logs" / "aknet";
 
     }
 
@@ -51,7 +53,11 @@ namespace aknet::logger {
     // Public
     // ------------------------------------------------------------------------------------------------
 
-    void logger::init(std::filesystem::path log_dir, const bool also_console) {
+    std::unique_ptr<logger> create_logger() {
+        return std::make_unique<logger>();
+    }
+
+    void logger::init(fs::path log_dir, const bool also_console) {
         if (g_logger) return;
 
         if (log_dir.empty()) {
@@ -86,7 +92,4 @@ namespace aknet::logger {
         g_logger.reset();
     }
 
-    std::unique_ptr<logger> create_logger() {
-        return std::make_unique<logger>();
-    }
-}
+};

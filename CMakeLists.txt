@@ -33,6 +33,17 @@ include(CompilerOptions)
 include(Dependencies)
 
 # --------------------------------------------------------------------------------------------------------
+# Setup Testing
+# --------------------------------------------------------------------------------------------------------
+
+# Enable testing support
+include(CTest)
+enable_testing()
+
+# Option to build tests
+option(AKNET_BUILD_TESTS "Build unit tests" ON)
+
+# --------------------------------------------------------------------------------------------------------
 # Subdirectories
 # --------------------------------------------------------------------------------------------------------
 
@@ -41,6 +52,35 @@ add_subdirectory(src/core)
 
 # Modules
 add_subdirectory(src/modules/logger)
+
+# --------------------------------------------------------------------------------------------------------
+# Tests
+# --------------------------------------------------------------------------------------------------------
+
+if(AKNET_BUILD_TESTS)
+    # Module tests
+    add_subdirectory(src/core/tests)
+    add_subdirectory(src/modules/logger/tests)
+
+    # Integration tests
+    add_subdirectory(tests)
+
+    # Unified test executable with ALL tests
+    add_executable(aknet_all_tests
+            ${AKNET_LOGGER_TEST_SOURCES}
+            ${AKNET_CORE_TEST_SOURCES}
+            ${AKNET_INTEGRATION_TEST_SOURCES}
+    )
+
+    target_link_libraries(aknet_all_tests
+            PRIVATE
+            aknet_core
+            aknet_logger
+            Catch2::Catch2WithMain
+    )
+
+    target_compile_features(aknet_all_tests PRIVATE cxx_std_23)
+endif()
 
 # --------------------------------------------------------------------------------------------------------
 # Create executable
