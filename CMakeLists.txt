@@ -51,7 +51,12 @@ option(AKNET_BUILD_TESTS "Build unit tests" ON)
 add_subdirectory(src/core)
 
 # Modules
-add_subdirectory(src/modules/logger)
+
+# Utils
+add_subdirectory(src/utils/logger)
+
+# We make the utilities available to all modules
+target_link_libraries(aknet_core PUBLIC aknet_logger)
 
 # --------------------------------------------------------------------------------------------------------
 # Tests
@@ -60,7 +65,7 @@ add_subdirectory(src/modules/logger)
 if(AKNET_BUILD_TESTS)
     # Module tests
     add_subdirectory(src/core/tests)
-    add_subdirectory(src/modules/logger/tests)
+    add_subdirectory(src/utils/logger/tests)
 
     # Integration tests
     add_subdirectory(tests)

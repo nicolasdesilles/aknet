@@ -6,20 +6,27 @@
 #define AKNET_CORE_H
 
 #pragma once
-#include <memory>
 #include <logger.h>
 
 namespace aknet {
 
     class core {
 
-        std::unique_ptr<logger::logger> logger_;
-
         public:
-            void init();
-            void shutdown();
+
+            ~core() {
+                // Shutdown the logging system
+                log::shutdown();
+            }
+
+            // We make these static since we will only have one core instance
+            static void init();
+            static void shutdown();
 
             static void test_function();
+
+    private:
+        static std::shared_ptr<spdlog::logger> logger;
 
     };
 
