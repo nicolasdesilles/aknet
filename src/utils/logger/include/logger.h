@@ -88,6 +88,9 @@ namespace aknet::log {
     // Set the global log level for all loggers
     void set_global_log_level(LogLevel lvl);
 
+    // Get initialization state of the logging system
+    bool is_initialized();
+
     // Create or retrieve a named logger (each module calls this)
     std::shared_ptr<Logger> get(const std::string& name);
 

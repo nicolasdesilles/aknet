@@ -132,6 +132,8 @@ if(ENABLE_COVERAGE)
         message(STATUS "Found llvm-cov: ${LLVM_COV_PATH}")
         message(STATUS "Found llvm-profdata: ${LLVM_PROFDATA_PATH}")
 
+        set(COVERAGE_IGNORE_REGEX "build/.*|build_coverage/.*|_deps/.*|.*tests/.*")
+
         # Add custom target for generating coverage report
         add_custom_target(coverage
                 COMMAND ${CMAKE_COMMAND} -E echo "Running tests..."
@@ -142,16 +144,16 @@ if(ENABLE_COVERAGE)
 
                 COMMAND ${CMAKE_COMMAND} -E echo "Generating HTML coverage report..."
                 COMMAND ${LLVM_COV_PATH} show $<TARGET_FILE:aknet_all_tests>
-                -instr-profile=${CMAKE_BINARY_DIR}/coverage.profdata
-                -format=html
-                -output-dir=${CMAKE_BINARY_DIR}/coverage_report
-                -ignore-filename-regex='.*/(build|_deps|tests)/.*'
+                -instr-profile ${CMAKE_BINARY_DIR}/coverage.profdata
+                -format html
+                -output-dir ${CMAKE_BINARY_DIR}/coverage_report
+                -ignore-filename-regex="${COVERAGE_IGNORE_REGEX}"
                 ${CMAKE_SOURCE_DIR}/src
 
                 COMMAND ${CMAKE_COMMAND} -E echo "Generating coverage summary..."
                 COMMAND ${LLVM_COV_PATH} report $<TARGET_FILE:aknet_all_tests>
-                -instr-profile=${CMAKE_BINARY_DIR}/coverage.profdata
-                -ignore-filename-regex='.*/(build|_deps|tests)/.*'
+                -instr-profile ${CMAKE_BINARY_DIR}/coverage.profdata
+                -ignore-filename-regex="${COVERAGE_IGNORE_REGEX}"
 
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
                 DEPENDS aknet_all_tests

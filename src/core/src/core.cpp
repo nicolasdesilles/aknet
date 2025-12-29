@@ -17,7 +17,7 @@ namespace aknet {
         // Get a logger for the core
         logger_ = log::get("core");
 
-        logger_->info("aknet - v{} by {}", PROJECT_VERSION, PROJECT_AUTHOR);
+        log_aknet_start_message();
         logger_->info("Initializing Core...");
 
         // Future: create owned modules here
@@ -43,4 +43,16 @@ namespace aknet {
         logger_->info("Core test function called");
     }
 
+    void core::log_aknet_start_message() {
+        if (logger_) {
+            logger_->info("--------------------------------------------------------");
+            logger_->info("      ▄▄                  ██  ");
+            logger_->info(" ▀▀█▄ ██ ▄█▀ ████▄ ▄█▀█▄ ▀██▀▀");
+            logger_->info("▄█▀██ ████   ██ ██ ██▄█▀  ██  ");
+            logger_->info("▀█▄██ ██ ▀█▄ ██ ██ ▀█▄▄▄  ██  ");
+            logger_->info("");
+            logger_->info("aknet - v{} by {}", PROJECT_VERSION, PROJECT_AUTHOR);
+            logger_->info("--------------------------------------------------------");
+        }
+    }
 } // namespace aknet

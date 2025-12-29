@@ -36,6 +36,8 @@ namespace aknet {
     private:
         std::shared_ptr<log::Logger> logger_;
 
+        void log_aknet_start_message();
+
         // Future: owned modules
         // std::unique_ptr<ModuleA> module_a_;
     };

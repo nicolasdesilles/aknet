@@ -69,6 +69,7 @@ namespace aknet::log {
     namespace {
         std::mutex g_mutex;
         std::vector<spdlog::sink_ptr> g_sinks;
+        std::unordered_map<std::string, std::shared_ptr<Logger>> g_loggers;
         bool g_initialized = false;
     }
 
@@ -77,7 +78,7 @@ namespace aknet::log {
     // -------------------------------------------------------------------------
     fs::path default_log_dir() {
         const char* home = std::getenv("HOME");
-        if (!home) return fs::current_path() / "logs";
+        if (!home) return fs::current_path() / "logs" ;
         return fs::path(home) / "Desktop" / "Logs" / "aknet";
     }
 
@@ -159,6 +160,7 @@ namespace aknet::log {
 
         spdlog::shutdown();
         g_sinks.clear();
+        g_loggers.clear();
         g_initialized = false;
     }
 
@@ -176,13 +178,24 @@ namespace aknet::log {
         spdlog::set_level(spd_lvl);
     }
 
+    bool is_initialized() {
+        return g_initialized;
+    }
+
     std::shared_ptr<Logger> get(const std::string& name) {
         std::lock_guard lock(g_mutex);
 
-        // Check if the logger already exists in the spdlog registry
+        // Check if we already have a wrapper for this logger
+        if (auto it = g_loggers.find(name); it != g_loggers.end()) {
+            return it->second;
+        }
+
+        // Check if the logger already exists in the spdlog registry, but we don't have it cached
         auto spd_logger = spdlog::get(name);
         if (spd_logger) {
-            return std::make_shared<Logger>(std::make_shared<LoggerImpl>(spd_logger));
+            auto logger = std::make_shared<Logger>(std::make_shared<LoggerImpl>(spd_logger));
+            g_loggers[name] = logger;
+            return logger;
         }
 
         // Make sure that the logging system is initialized
@@ -192,12 +205,17 @@ namespace aknet::log {
         }
 
         // Create anew spdlog logger with shared sinks
+        if (empty(name)) {
+            throw std::invalid_argument("Logger name cannot be empty");
+        }
         auto new_spd_logger = std::make_shared<spdlog::logger>(name, g_sinks.begin(), g_sinks.end());
         new_spd_logger->set_level(spdlog::level::trace);
         new_spd_logger->set_pattern("%Y-%m-%d %H:%M:%S.%e [%10!n] %^[%8l]%$ %v");
         spdlog::register_logger(new_spd_logger);
 
-        return std::make_shared<Logger>(std::make_shared<LoggerImpl>(new_spd_logger));
+        auto logger = std::make_shared<Logger>(std::make_shared<LoggerImpl>(new_spd_logger));
+        g_loggers[name] = logger;
+        return logger;
     }
 
 } // namespace aknet::log
