@@ -72,3 +72,5 @@ src/ui/yarn-debug.log*
 src/ui/yarn-error.log*
 src/ui/pnpm-debug.log*
 src/ui/lerna-debug.log*
+logs/
+
