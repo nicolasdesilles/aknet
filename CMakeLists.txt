@@ -56,10 +56,10 @@ add_subdirectory(src/core)
 add_subdirectory(src/utils/logger)
 
 # We make the utilities available to all modules
-target_link_libraries(aknet_core PUBLIC aknet_logger)
 
 # --------------------------------------------------------------------------------------------------------
 # Tests
+# --------------------------------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------------------------------
 
 if(AKNET_BUILD_TESTS)
