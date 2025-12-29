@@ -3,46 +3,44 @@
 //
 
 #include "core.h"
-#include "version.h"
-#include <iostream>
+#include <version.h>
 
 namespace aknet {
 
-    std::shared_ptr<spdlog::logger> core::logger = nullptr;
+    // Constructor
+    core::core(const core_config& config) {
 
-    void core::init() {
+        // Initialize logging infrastructure (the core owns it)
+        log::init(config.log_dir);
+        log::set_global_log_level(config.log_level);
 
-        // When we start the core, we start the tools we need before anything else
+        // Get a logger for the core
+        logger_ = log::get("core");
 
-        // Initialize the logging system
-        log::init();
-        log::set_global_log_level(log::LogLevel::trace);
+        logger_->info("aknet - v{} by {}", PROJECT_VERSION, PROJECT_AUTHOR);
+        logger_->info("Initializing Core...");
 
-        // Then, we register a logger for this module
-        logger = log::get("core");
-        logger->set_level(spdlog::level::trace);
+        // Future: create owned modules here
+        // module_a_ = std::make_unique<ModuleA>();
 
-        logger->info("aknet - v{0} by {1}", PROJECT_VERSION, PROJECT_AUTHOR);
-
-        logger->info("Initializing core module...");
-
-        logger->info("Initializing core module - done.");
-
+        logger_->info("Initializing Core: Done.");
     }
 
-    void core::shutdown() {
+    // Destructor
+    core::~core() {
+        logger_->info("Core shutting down...");
 
-        logger->info("Core shutdown called");
+        // 1. Future: modules are destroyed automatically (unique_ptr, reverse order)
 
-        // We let go of our logger
-        logger.reset();
+        // 2. Release our logger before shutting down logging system
+        logger_.reset();
 
-        // Shutdown the logging system
+        // 3. Shutdown logging infrastructure last
         log::shutdown();
-
     }
 
     void core::test_function() {
-        logger->info("Core test function called");
+        logger_->info("Core test function called");
     }
-}
+
+} // namespace aknet

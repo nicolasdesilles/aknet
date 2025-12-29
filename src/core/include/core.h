@@ -6,30 +6,40 @@
 #define AKNET_CORE_H
 
 #pragma once
+
+#include <memory>
+#include <filesystem>
 #include <logger.h>
 
 namespace aknet {
 
-    class core {
-
-        public:
-
-            ~core() {
-                // Shutdown the logging system
-                log::shutdown();
-            }
-
-            // We make these static since we will only have one core instance
-            static void init();
-            static void shutdown();
-
-            static void test_function();
-
-    private:
-        static std::shared_ptr<spdlog::logger> logger;
-
+    struct core_config {
+        std::filesystem::path log_dir = {};
+        log::LogLevel log_level = log::LogLevel::info;
     };
 
-}
+    class core {
+    public:
 
-#endif //AKNET_CORE_H
+        explicit core(const core_config& config = {});
+        ~core();
+
+        // Non-copyable, non-movable
+        core(const core&) = delete;
+        core& operator=(const core&) = delete;
+
+        void test_function();
+
+        // Future: accessors for owned modules
+        // ModuleA& module_a();
+
+    private:
+        std::shared_ptr<log::Logger> logger_;
+
+        // Future: owned modules
+        // std::unique_ptr<ModuleA> module_a_;
+    };
+
+} // namespace aknet
+
+#endif // AKNET_CORE_H
