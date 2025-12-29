@@ -76,6 +76,13 @@ namespace aknet::log {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /*
+     * WARNING: hardcoded the default logs dir to "home/Desktop/Logs/aknet in the logger.cpp
+     * This will only work on macOS.
+     * --> TO UPDATE LATER!
+     * To do: have a better default logs location for all plateforms
+     */
     fs::path default_log_dir() {
         const char* home = std::getenv("HOME");
         if (!home) return fs::current_path() / "logs" ;

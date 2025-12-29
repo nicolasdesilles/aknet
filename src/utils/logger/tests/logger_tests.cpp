@@ -75,6 +75,12 @@ TEST_CASE("Logger | System Initialisation", "[logger]") {
 
     }
 
+
+    /*
+     * WARNING: this test is only okay to do on macOS, and also because I have hardcoded the default logs dir
+     * to "home/Desktop/Logs/aknet in the logger.cpp
+     * --> TO UPDATE LATER!
+     */
     SECTION("init without a specified directory creates a log file in the default location") {
 
         const char* home = std::getenv("HOME");
