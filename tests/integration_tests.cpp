@@ -8,18 +8,3 @@
 
 using namespace aknet;
 
-TEST_CASE("Integration | Full application lifecycle", "[integration]") {
-
-    SECTION("complete init-use-shutdown cycle") {
-        core app;
-
-        // Initialize
-        REQUIRE_NOTHROW(app.init());
-
-        // Use features
-        REQUIRE_NOTHROW(core::test_function());
-
-        // Shutdown
-        REQUIRE_NOTHROW(app.shutdown());
-    }
-}

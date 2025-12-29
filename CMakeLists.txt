@@ -119,6 +119,50 @@ endif()
 
 saucer_embed("src/ui/dist")
 
+# --------------------------------------------------------------------------------------------------------
+# Code Coverage (only for aknet_all_tests)
+# --------------------------------------------------------------------------------------------------------
+
+if(ENABLE_COVERAGE)
+    # Find llvm-cov and llvm-profdata
+    find_program(LLVM_COV_PATH llvm-cov)
+    find_program(LLVM_PROFDATA_PATH llvm-profdata)
+
+    if(LLVM_COV_PATH AND LLVM_PROFDATA_PATH)
+        message(STATUS "Found llvm-cov: ${LLVM_COV_PATH}")
+        message(STATUS "Found llvm-profdata: ${LLVM_PROFDATA_PATH}")
+
+        # Add custom target for generating coverage report
+        add_custom_target(coverage
+                COMMAND ${CMAKE_COMMAND} -E echo "Running tests..."
+                COMMAND LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/coverage.profraw $<TARGET_FILE:aknet_all_tests>
+
+                COMMAND ${CMAKE_COMMAND} -E echo "Merging coverage data..."
+                COMMAND ${LLVM_PROFDATA_PATH} merge -sparse ${CMAKE_BINARY_DIR}/coverage.profraw -o ${CMAKE_BINARY_DIR}/coverage.profdata
+
+                COMMAND ${CMAKE_COMMAND} -E echo "Generating HTML coverage report..."
+                COMMAND ${LLVM_COV_PATH} show $<TARGET_FILE:aknet_all_tests>
+                -instr-profile=${CMAKE_BINARY_DIR}/coverage.profdata
+                -format=html
+                -output-dir=${CMAKE_BINARY_DIR}/coverage_report
+                -ignore-filename-regex='.*/(build|_deps|tests)/.*'
+                ${CMAKE_SOURCE_DIR}/src
+
+                COMMAND ${CMAKE_COMMAND} -E echo "Generating coverage summary..."
+                COMMAND ${LLVM_COV_PATH} report $<TARGET_FILE:aknet_all_tests>
+                -instr-profile=${CMAKE_BINARY_DIR}/coverage.profdata
+                -ignore-filename-regex='.*/(build|_deps|tests)/.*'
+
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                DEPENDS aknet_all_tests
+                COMMENT "Generating code coverage report..."
+        )
+
+    else()
+        message(WARNING "llvm-cov or llvm-profdata not found. Coverage target will not be available.")
+    endif()
+endif()
+
 
 
 

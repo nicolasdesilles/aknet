@@ -10,6 +10,14 @@ if(APPLE)
     add_link_options(-Wl,-stack_size,0x1000000)
 endif()
 
+# Coverage options
+option(ENABLE_COVERAGE "Enable code coverage" OFF)
+
+if(ENABLE_COVERAGE)
+    add_compile_options(--coverage -fprofile-instr-generate -fcoverage-mapping)
+    add_link_options(--coverage -fprofile-instr-generate)
+endif()
+
 # Optimization settings
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_options(-O3 -march=native)

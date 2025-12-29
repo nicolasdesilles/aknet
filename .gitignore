@@ -1,5 +1,6 @@
 # CMake build directories
 /build/
+/build_coverage/
 /bin/
 /lib/
 
