@@ -1,0 +1,13 @@
+#pragma once
+
+#include <string>
+
+#ifndef VERSION_H_IN
+#define VERSION_H_IN
+
+const std::string PROJECT_NAME = "@PROJECT_NAME@";
+const std::string PROJECT_VERSION = "@PROJECT_VERSION@";
+const std::string PROJECT_BUILD_DATE = "@PROJECT_BUILD_DATE@";
+const std::string PROJECT_AUTHOR = "@PROJECT_AUTHOR@";
+
+#endif // VERSION_H_IN
