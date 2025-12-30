@@ -157,8 +157,9 @@ namespace aknet::log {
 
             g_initialized = true;
         }
-        catch (const spdlog::spdlog_ex& ex) {
+        catch (const spdlog::spdlog_ex &ex) {
             std::cerr << "Logging initialization failed: " << ex.what() << std::endl;
+            g_sinks.clear(); // Clear any partially populated sinks to maintain consistent state
         }
     }
 
@@ -172,6 +173,8 @@ namespace aknet::log {
     }
 
     void set_global_log_level(LogLevel lvl) {
+        std::lock_guard lock(g_mutex);
+
         spdlog::level::level_enum spd_lvl = spdlog::level::info;
         switch (lvl) {
             case LogLevel::trace: spd_lvl = spdlog::level::trace; break;
@@ -186,6 +189,7 @@ namespace aknet::log {
     }
 
     bool is_initialized() {
+        std::lock_guard lock(g_mutex);
         return g_initialized;
     }
 
