@@ -13,6 +13,9 @@ CTestTestfile.cmake
 Makefile
 compile_commands.json
 
+# CPM Make (is downloaded automatically by CMake, no need to track it)
+cmake/CPM.cmake
+
 # Object files and binaries
 *.o
 *.obj
