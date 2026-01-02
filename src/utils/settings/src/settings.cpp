@@ -16,7 +16,13 @@ namespace aknet::settings {
     // -------------------------------------------------------------------------
 
     // Constructor
-    Settings::Settings(std::shared_ptr<log::Logger> logger, SettingsConfig config) {
+    Settings::Settings() = default;
+
+    // Destructor
+    Settings::~Settings() = default;
+
+    // Init
+    void Settings::init(std::shared_ptr<log::Logger> logger, SettingsConfig config) {
         if (!logger) {
             throw std::invalid_argument("A valid Logger must be provided to Settings on creation");
         }
@@ -33,8 +39,11 @@ namespace aknet::settings {
         config_ = std::move(config);
     }
 
-    // Destructor
-    Settings::~Settings() = default;
+    void Settings::shutdown() {
+
+        logger_ = nullptr;
+        config_ = {};
+    }
 
     std::filesystem::path Settings::path() {
         return config_.base_dir / config_.file_name;

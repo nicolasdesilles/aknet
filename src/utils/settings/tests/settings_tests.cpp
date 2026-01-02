@@ -44,8 +44,11 @@ TEST_CASE("Settings | Creation", "[settings]") {
 
     SECTION("creating settings without a valid logger throws") {
         auto test_config = settings::SettingsConfig{fs::temp_directory_path(), "test", 1};
+        auto test_settings = settings::Settings();
         
-        CHECK_THROWS_AS(settings::Settings(nullptr, test_config), std::invalid_argument);
+        CHECK_THROWS_AS(test_settings.init(nullptr, test_config), std::invalid_argument);
+
+        test_settings.shutdown();
     }
 
     SECTION("creating settings without a base_dir specified in config throws") {
@@ -55,8 +58,11 @@ TEST_CASE("Settings | Creation", "[settings]") {
 
         // Empty path should trigger an error during initialization
         auto invalid_config = settings::SettingsConfig{fs::path(""), "test", 1};
+        auto test_settings = settings::Settings();
 
-        CHECK_THROWS_AS(settings::Settings(test_logger, invalid_config), std::invalid_argument);
+        CHECK_THROWS_AS(test_settings.init(test_logger, invalid_config), std::invalid_argument);
+
+        test_settings.shutdown();
 
         log::shutdown();
 
@@ -71,10 +77,14 @@ TEST_CASE("Settings | Creation", "[settings]") {
         // Providing an empty string for the filename
         auto config_empty_name = settings::SettingsConfig{temp_dir.path(), "", 1};
 
-        settings::Settings test_settings(test_logger, config_empty_name);
+        auto test_settings = settings::Settings();
+
+        REQUIRE_NOTHROW(test_settings.init(test_logger, config_empty_name));
 
         // Verify that it defaults to "aknet_settings.json"
         REQUIRE(test_settings.path() == (temp_dir.path() / "aknet_settings.json"));
+
+        test_settings.shutdown();
 
         log::shutdown();
 
@@ -92,10 +102,14 @@ TEST_CASE("Settings | Creation", "[settings]") {
             .schema_version = 1
         };
 
-        settings::Settings test_settings(test_logger, config_no_name);
+        auto test_settings = settings::Settings();
+
+        REQUIRE_NOTHROW(test_settings.init(test_logger, config_no_name));
 
         // Verify that it defaults to "aknet_settings.json"
         REQUIRE(test_settings.path() == (temp_dir.path() / "aknet_settings.json"));
+
+        test_settings.shutdown();
 
         log::shutdown();
 
@@ -113,9 +127,9 @@ TEST_CASE("Settings | Creation", "[settings]") {
             "aknet_test_settings",
             1};
 
-        auto test_settings = settings::Settings(
-            test_logger,
-            test_config);
+        auto test_settings = settings::Settings();
+
+        test_settings.init(test_logger, test_config);
 
         auto snapshot = test_settings.snapshot();
 

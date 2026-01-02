@@ -50,9 +50,13 @@ namespace aknet::settings {
 
     class Settings {
     public:
-        Settings(std::shared_ptr<log::Logger> logger,
-            SettingsConfig config);
+        Settings();
         ~Settings();
+
+        void init(std::shared_ptr<log::Logger> logger,
+            SettingsConfig config);
+
+        void shutdown();
 
         std::filesystem::path path();
 
