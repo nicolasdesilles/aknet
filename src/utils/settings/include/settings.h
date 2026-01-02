@@ -8,6 +8,7 @@
 #pragma once
 
 #include "logger.h"
+#include <nlohmann/json.hpp>
 
 namespace aknet::settings {
     // -------------------------------------------------------------------------
@@ -15,7 +16,7 @@ namespace aknet::settings {
     // -------------------------------------------------------------------------
 
     struct General {
-        std::string log_level = "info";
+        std::string log_level = "debug";
     };
 
     struct Audio {
@@ -28,6 +29,11 @@ namespace aknet::settings {
         General general;
         Audio audio;
     };
+
+    // JSON (de)serialization (required for: nlohmann::json j = settings;)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(General, log_level);
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Audio, sampling_rate, buffer_size);
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(AppSettings, schema_version, general, audio);
 
     // -------------------------------------------------------------------------
     // Settings system
@@ -45,6 +51,13 @@ namespace aknet::settings {
     };
 
     // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    Result from_json_string(std::string_view json_str,AppSettings& out);
+    std::string to_json_string(const AppSettings& settings);
+
+    // -------------------------------------------------------------------------
     // Settings class
     // -------------------------------------------------------------------------
 
@@ -58,6 +71,8 @@ namespace aknet::settings {
 
         void shutdown();
 
+        bool is_initialized();
+
         std::filesystem::path path();
 
         // Read (active snapshot)
@@ -66,6 +81,8 @@ namespace aknet::settings {
     private:
         AppSettings defaults_{}; // compile-time defaults
         SettingsConfig config_;
+
+        bool initialized_ = false;
 
         std::shared_ptr<log::Logger> logger_;
     };

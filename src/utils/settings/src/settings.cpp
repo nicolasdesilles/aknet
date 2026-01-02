@@ -8,8 +8,45 @@
 #include <memory>
 #include <ranges>
 #include <string>
+#include <nlohmann/json.hpp>
 
 namespace aknet::settings {
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    Result from_json_string(std::string_view json_str, AppSettings &out) {
+
+        nlohmann::json j;
+
+        // First we try to parse the string to JSON
+        try {
+            j = nlohmann::json::parse(json_str);
+        }
+        catch (nlohmann::json::parse_error& e) {
+            return Result{.ok = false, .error = e.what()};
+        }
+
+        // Then we try to convert to our struct
+        try {
+            out = j.get<AppSettings>();
+        }
+        catch (nlohmann::json::type_error& e) {
+            return Result{.ok = false, .error = e.what()};
+        }
+
+        return Result{.ok = true};;
+    }
+
+    std::string to_json_string(const AppSettings &settings) {
+
+        nlohmann::json j = settings;
+
+        return j.dump();
+    }
+
+
 
     // -------------------------------------------------------------------------
     // Settings implementation
@@ -37,12 +74,18 @@ namespace aknet::settings {
 
         logger_ = std::move(logger);
         config_ = std::move(config);
+        initialized_ = true;
     }
 
     void Settings::shutdown() {
 
         logger_ = nullptr;
         config_ = {};
+        initialized_ = false;
+    }
+
+    bool Settings::is_initialized() {
+        return initialized_;
     }
 
     std::filesystem::path Settings::path() {

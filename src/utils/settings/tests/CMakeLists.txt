@@ -12,6 +12,7 @@ target_link_libraries(aknet_settings_tests
         PRIVATE
         aknet_logger
         aknet_settings
+        nlohmann_json::nlohmann_json
         Catch2::Catch2WithMain
 )
 

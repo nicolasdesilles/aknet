@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <filesystem>
+#include <iostream>
 
 #include <logger.h>
 #include <settings.h>
@@ -135,11 +136,39 @@ TEST_CASE("Settings | Creation", "[settings]") {
 
         REQUIRE(snapshot != nullptr);
         CHECK(snapshot->schema_version == 1);
-        CHECK(snapshot->general.log_level == "info");
+        CHECK(snapshot->general.log_level == "debug");
         CHECK(snapshot->audio.sampling_rate == 48000);
         CHECK(snapshot->audio.buffer_size == 256);
 
         log::shutdown();
+
+    }
+}
+
+TEST_CASE("Settings | JSON Helpers", "[settings]") {
+
+    SECTION("roundtrip of app settings in json strings works") {
+
+        auto test_app_settings = settings::AppSettings{};
+
+        auto json_str = settings::to_json_string(test_app_settings);
+        CHECK(!json_str.empty());
+
+        auto destination_app_settings = settings::AppSettings{};
+
+        //Purposefully changing values
+        destination_app_settings.general.log_level = "trace";
+        destination_app_settings.audio.sampling_rate = 44100;
+        destination_app_settings.audio.buffer_size = 512;
+
+        settings::Result parse_results = settings::from_json_string(json_str,destination_app_settings);
+
+        REQUIRE(parse_results.ok);
+
+        REQUIRE(destination_app_settings.general.log_level == "debug");
+        REQUIRE(destination_app_settings.audio.sampling_rate == 48000);
+        REQUIRE(destination_app_settings.audio.buffer_size == 256);
+
 
     }
 }
