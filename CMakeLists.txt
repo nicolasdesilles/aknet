@@ -54,6 +54,7 @@ add_subdirectory(src/core)
 
 # Utils
 add_subdirectory(src/utils/logger)
+add_subdirectory(src/utils/settings)
 
 # We make the utilities available to all modules
 
@@ -66,6 +67,7 @@ if(AKNET_BUILD_TESTS)
     # Module tests
     add_subdirectory(src/core/tests)
     add_subdirectory(src/utils/logger/tests)
+    add_subdirectory(src/utils/settings/tests)
 
     # Integration tests
     add_subdirectory(tests)
@@ -73,6 +75,7 @@ if(AKNET_BUILD_TESTS)
     # Unified test executable with ALL tests
     add_executable(aknet_all_tests
             ${AKNET_LOGGER_TEST_SOURCES}
+            ${AKNET_SETTINGS_TEST_SOURCES}
             ${AKNET_CORE_TEST_SOURCES}
             ${AKNET_INTEGRATION_TEST_SOURCES}
     )
@@ -81,6 +84,7 @@ if(AKNET_BUILD_TESTS)
             PRIVATE
             aknet_core
             aknet_logger
+            aknet_settings
             Catch2::Catch2WithMain
     )
 
@@ -103,6 +107,7 @@ if(APPLE)
             PRIVATE
             aknet_core
             aknet_logger
+            aknet_settings
             saucer::saucer
             saucer::embedded
     )
