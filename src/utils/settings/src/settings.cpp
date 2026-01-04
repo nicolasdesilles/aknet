@@ -17,24 +17,40 @@
 namespace aknet::settings {
 
     namespace {
-        bool key_changed(const std::string& key, const AppSettings& old_settings, const AppSettings& new_settings) {
-            if (key == "general.log_level") {
-                return old_settings.general.log_level != new_settings.general.log_level;
-            }
+        bool key_changed(const std::string &key, const AppSettings &old_settings, const AppSettings &new_settings) {
+            try {
+                // Convert both settings to JSON
+                nlohmann::json old_json = old_settings;
+                nlohmann::json new_json = new_settings;
 
-            if (key == "general.test_restart_impact") {
-                return old_settings.general.test_restart_impact != new_settings.general.test_restart_impact;
-            }
+                // Parse the key path (e.g., "general.log_level" -> ["general", "log_level"])
+                std::vector<std::string> key_parts;
+                std::stringstream ss(key);
+                std::string part;
+                while (std::getline(ss, part, '.')) {
+                    key_parts.push_back(part);
+                }
 
-            if (key == "audio.sampling_rate") {
-                return old_settings.audio.sampling_rate != new_settings.audio.sampling_rate;
-            }
+                // Navigate to the nested value in both JSONs
+                nlohmann::json old_value = old_json;
+                nlohmann::json new_value = new_json;
 
-            if (key == "audio.buffer_size") {
-                return old_settings.audio.buffer_size != new_settings.audio.buffer_size;
-            }
+                for (const auto &key_part: key_parts) {
+                    if (!old_value.contains(key_part) || !new_value.contains(key_part)) {
+                        // Key doesn't exist in one or both settings
+                        return false;
+                    }
+                    old_value = old_value[key_part];
+                    new_value = new_value[key_part];
+                }
 
-            return false;
+                // Compare the values
+                return old_value != new_value;
+        
+            } catch (const nlohmann::json::exception&) {
+                // If any JSON operation fails, assume no change
+                return false;
+            }
         }
 
         void add_unique(std::vector<std::string>& items, const std::string& value) {
@@ -71,9 +87,6 @@ namespace aknet::settings {
         try {
             j = nlohmann::json::parse(json_str);
         }
-        catch (nlohmann::json::parse_error& e) {
-            return Result{.ok = false, .error = e.what()};
-        }
         catch (nlohmann::json::exception& e) {
             return Result{.ok = false, .error = e.what()};
         }
@@ -86,7 +99,7 @@ namespace aknet::settings {
             return Result{.ok = false, .error = e.what()};
         }
 
-        return Result{.ok = true};;
+        return Result{.ok = true};
     }
 
     std::string to_json_string(const AppSettings &settings) {
@@ -124,24 +137,8 @@ namespace aknet::settings {
                 .error = "Target path " + file_path.string() + " is a directory"};
         }
 
-        std::filesystem::path parent_dir;
-        try {
-            parent_dir = file_path.parent_path();
-        }
-        catch (std::filesystem::filesystem_error& e) {
-            return Result{
-                .ok = false,
-                .error = "Error when processing destination file path : " + file_path.string() +  e.what()};
-        }
-
-        try {
-            std::filesystem::create_directories(parent_dir);
-        }
-        catch (std::filesystem::filesystem_error& e) {
-            return Result{
-                .ok = false,
-                .error = "Error when creating parent directories for destination file path : " + file_path.string() +  e.what()};
-        }
+        std::filesystem::path parent_dir = file_path.parent_path();
+        std::filesystem::create_directories(parent_dir);
 
         std::filesystem::path tmp_path = file_path;
         tmp_path += ".tmp";
@@ -319,14 +316,6 @@ namespace aknet::settings {
             return Result{.ok = false, .error = "Settings system not initialized before load or create"};
         }
 
-        if (config_.base_dir.empty()) {
-            return Result{.ok = false, .error = "Settings base directory not set"};
-        }
-
-        if (settings_file_path.empty()) {
-            return Result{.ok = false, .error = "Settings file path not set"};
-        }
-
         try {
             std::filesystem::create_directories(settings_file_path.parent_path());
         }
@@ -404,10 +393,6 @@ namespace aknet::settings {
         }
 
         logger_->info("Saving pending settings changes...");
-
-        if (!snapshot_) {
-            return SaveResult{.result = Result{.ok = false, .error = "Settings snapshot is null"}, .save_impact = impact};
-        }
 
         const AppSettings old_settings = *snapshot_;
 

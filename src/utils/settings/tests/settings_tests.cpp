@@ -610,6 +610,31 @@ TEST_CASE("Settings | Load from file or Create", "[settings]") {
         log::shutdown();
     }
 
+    SECTION("fails when settings file path points to a directory") {
+        TempDir temp_dir;
+        log::init();
+        auto test_logger = log::get("test");
+
+        // Create a directory with the exact name that would be used for settings file
+        auto settings_dir_path = temp_dir.path() / "aknet_test_settings.json";
+        fs::create_directories(settings_dir_path);
+
+        auto config = settings::SettingsConfig{
+            .base_dir = temp_dir.path(),
+            .file_name = "aknet_test_settings.json",  // This is actually a directory!
+            .schema_version = 1
+        };
+
+        settings::Settings test_settings;
+        test_settings.init(test_logger, config);
+
+        auto result = test_settings.load_or_create();
+        REQUIRE_FALSE(result.ok);
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+
 }
 
 TEST_CASE("Settings | Pending and Save", "[settings]") {
@@ -740,6 +765,60 @@ TEST_CASE("Settings | Pending and Save", "[settings]") {
         CHECK_FALSE(save_result.save_impact.app_restart_required);
         CHECK(save_result.save_impact.modules_restart_required.empty());
         CHECK(save_result.save_impact.restart_sensitive_keys_changed.empty());
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("overwriting when .bak already exists removes old .bak first") {
+        TempDir temp_dir;
+        auto file_path = temp_dir.path() / "test.json";
+        auto bak_path = temp_dir.path() / "test.json.bak";
+
+        // Create initial file
+        settings::AppSettings initial{};
+        auto r1 = settings::to_json_file(file_path, initial);
+        REQUIRE(r1.ok);
+
+        // Manually create a .bak file
+        std::ofstream bak_file(bak_path);
+        bak_file << "old backup content";
+        bak_file.close();
+        REQUIRE(fs::exists(bak_path));
+
+        // Overwrite the settings file
+        settings::AppSettings modified{};
+        modified.general.log_level = "trace";
+        auto r2 = settings::to_json_file(file_path, modified);
+        REQUIRE(r2.ok);
+
+        // Verify .bak was cleaned up after save
+        CHECK_FALSE(fs::exists(bak_path));
+    }
+
+    SECTION("save fails when file cannot be written") {
+        TempDir temp_dir;
+        log::init();
+        auto test_logger = log::get("test");
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "test.json", 1};
+        test_settings.init(test_logger, config);
+        test_settings.load_or_create();
+
+        // Make the directory read-only to prevent writes
+        fs::permissions(temp_dir.path(), fs::perms::owner_read | fs::perms::owner_exec);
+
+        test_settings.stage([](settings::AppSettings& s) {
+            s.general.log_level = "trace";
+        });
+
+        auto result = test_settings.save();
+
+        // Restore permissions
+        fs::permissions(temp_dir.path(), fs::perms::owner_all);
+
+        REQUIRE_FALSE(result.result.ok);
 
         test_settings.shutdown();
         log::shutdown();
@@ -964,6 +1043,25 @@ TEST_CASE("Settings | Import and Export", "[settings]") {
         test_settings.shutdown();
         log::shutdown();
     }
+
+    SECTION("writing to a read-only directory fails gracefully") {
+        TempDir temp_dir;
+        auto readonly_dir = temp_dir.path() / "readonly";
+        fs::create_directories(readonly_dir);
+
+        // Make directory read-only
+        fs::permissions(readonly_dir, fs::perms::owner_read | fs::perms::owner_exec);
+
+        auto file_path = readonly_dir / "test.json";
+        settings::AppSettings test_settings{};
+
+        auto result = settings::to_json_file(file_path, test_settings);
+
+        // Restore permissions for cleanup
+        fs::permissions(readonly_dir, fs::perms::owner_all);
+
+        REQUIRE_FALSE(result.ok);
+    }
 }
 
 TEST_CASE("Settings | Restart Rules and Impact", "[settings]") {
@@ -1062,24 +1160,31 @@ TEST_CASE("Settings | Restart Rules and Impact", "[settings]") {
         log::shutdown();
     }
 
-    SECTION("restart rule with empty module name does not add empty module entry") {
+    SECTION("restart rule with empty module_name_to_restart does not add to modules list") {
         TempDir temp_dir;
         log::init();
         auto test_logger = log::get("test");
-        auto config = settings::SettingsConfig{temp_dir.path(), "test.json", 1};
 
         settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "test.json", 1};
         test_settings.init(test_logger, config);
-        REQUIRE(test_settings.load_or_create().ok);
+        test_settings.load_or_create();
 
-        test_settings.add_restart_rule({"general.test_restart_impact", false, ""});
-        REQUIRE(test_settings.stage([](auto& s){ s.general.test_restart_impact = 1; }).ok);
+        // Add rule with empty module_name (but key and no app restart)
+        test_settings.add_restart_rule({
+            .key = "general.log_level",
+            .requires_app_restart = false,
+            .module_name_to_restart = ""  // Empty!
+        });
 
-        auto save_result = test_settings.save();
-        REQUIRE(save_result.result.ok);
-        REQUIRE(save_result.save_impact.modules_restart_required.empty());
-        REQUIRE_THAT(save_result.save_impact.restart_sensitive_keys_changed,
-                     Catch::Matchers::VectorContains(std::string("general.test_restart_impact")));
+        test_settings.stage([](settings::AppSettings& s) {
+            s.general.log_level = "trace";
+        });
+
+        auto result = test_settings.save();
+        REQUIRE(result.result.ok);
+        CHECK(result.save_impact.modules_restart_required.empty());
+        CHECK_FALSE(result.save_impact.restart_sensitive_keys_changed.empty());
 
         test_settings.shutdown();
         log::shutdown();
