@@ -23,7 +23,7 @@ target_include_directories(aknet_settings
 target_compile_features(aknet_settings PRIVATE cxx_std_23)
 
 # External dependencies
-target_link_libraries(aknet_settings PRIVATE
+target_link_libraries(aknet_settings PUBLIC
         nlohmann_json::nlohmann_json
         aknet_logger)
 

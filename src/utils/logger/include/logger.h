@@ -91,6 +91,8 @@ namespace aknet::log {
     // Get initialization state of the logging system
     bool is_initialized();
 
+    LogLevel string_to_log_level(std::string_view lvl_str);
+
     // Create or retrieve a named logger (each module calls this)
     std::shared_ptr<Logger> get(const std::string& name);
 

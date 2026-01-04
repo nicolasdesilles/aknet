@@ -28,7 +28,10 @@ coco::stray start(saucer::application* app)
 int main()
 {
     // Initialize aknet core
+    const char* home = std::getenv("HOME");
     g_core = std::make_unique<aknet::core>(aknet::core_config{
+        .settings_dir = std::filesystem::path(home) / "Desktop" / "Settings" ,
+        .settings_schema_version = 1,
         .log_level = aknet::log::LogLevel::trace
     });
 

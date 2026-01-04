@@ -20,6 +20,21 @@ namespace aknet {
         log_aknet_start_message();
         logger_->info("Initializing Core...");
 
+        // Start the settings system
+        auto settings_config = settings::SettingsConfig{
+        .base_dir = config.settings_dir,
+        .schema_version = config.settings_schema_version};
+        
+        auto settings_logger = log::get("settings");
+        
+        settings_.init(settings_logger, settings_config);
+        
+        // Loading saved settings
+        settings_.load_or_create();
+        
+        // Applying log level stored in settings
+        log::set_global_log_level(log::string_to_log_level(settings_.snapshot()->general.log_level));
+
         // Future: create owned modules here
         // module_a_ = std::make_unique<ModuleA>();
 
@@ -30,12 +45,15 @@ namespace aknet {
     core::~core() {
         logger_->info("Core shutting down...");
 
-        // 1. Future: modules are destroyed automatically (unique_ptr, reverse order)
+        // Future: modules are destroyed automatically (unique_ptr, reverse order)
+        
+        // Shutdown settings system
+        settings_.shutdown();
 
-        // 2. Release our logger before shutting down logging system
+        // Release our logger before shutting down logging system
         logger_.reset();
 
-        // 3. Shutdown logging infrastructure last
+        // Shutdown logging infrastructure last
         log::shutdown();
     }
 

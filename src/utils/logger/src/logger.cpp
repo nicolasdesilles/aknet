@@ -215,6 +215,17 @@ namespace aknet::log {
         return g_initialized;
     }
 
+    LogLevel string_to_log_level(std::string_view lvl_str) {
+        if (lvl_str == "trace") return LogLevel::trace;
+        if (lvl_str == "debug") return LogLevel::debug;
+        if (lvl_str == "info") return LogLevel::info;
+        if (lvl_str == "warn") return LogLevel::warn;
+        if (lvl_str == "error") return LogLevel::error;
+        if (lvl_str == "critical") return LogLevel::critical;
+        if (lvl_str == "off") return LogLevel::off;
+        throw std::invalid_argument("Invalid log level string");
+    }
+
     std::shared_ptr<Logger> get(const std::string& name) {
         std::lock_guard lock(g_mutex);
 
