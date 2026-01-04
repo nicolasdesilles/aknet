@@ -92,12 +92,34 @@ namespace aknet::log {
     std::string session_filename() {
         const auto now = std::chrono::system_clock::now();
         const auto t = std::chrono::system_clock::to_time_t(now);
+
         std::tm tm{};
         localtime_r(&t, &tm);
 
         std::ostringstream oss;
         oss << "aknet_" << std::put_time(&tm, "%Y%m%d_%H%M%S") << ".log";
         return oss.str();
+    }
+
+    static std::string unique_session_filename_in_dir(const fs::path& log_dir) {
+        std::string base = session_filename();
+        fs::path candidate = log_dir / base;
+
+        if (!fs::exists(candidate)) {
+            return base;
+        }
+
+        const fs::path base_path{base};
+        const std::string stem = base_path.stem().string();
+        const std::string ext  = base_path.extension().string();
+
+        for (std::uint32_t i = 1; ; ++i) {
+            const std::string name = stem + "_" + std::to_string(i) + ext;
+            candidate = log_dir / name;
+            if (!fs::exists(candidate)) {
+                return name;
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -138,7 +160,7 @@ namespace aknet::log {
         }
         fs::create_directories(log_dir);
 
-        const auto log_path = log_dir / session_filename();
+        const auto log_path = log_dir / unique_session_filename_in_dir(log_dir);
 
         try {
             // File sink: rotating, max 5MB, max 3 files

@@ -85,6 +85,7 @@ if(AKNET_BUILD_TESTS)
             aknet_core
             aknet_logger
             aknet_settings
+            nlohmann_json::nlohmann_json
             Catch2::Catch2WithMain
     )
 
