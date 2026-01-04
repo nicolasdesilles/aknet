@@ -8,6 +8,11 @@
 #pragma once
 
 #include "logger.h"
+
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <string_view>
 #include <nlohmann/json.hpp>
 
 namespace aknet::settings {
@@ -57,6 +62,10 @@ namespace aknet::settings {
     Result from_json_string(std::string_view json_str,AppSettings& out);
     std::string to_json_string(const AppSettings& settings);
 
+    Result from_json_file(const std::filesystem::path& file_path,AppSettings& out);
+    Result to_json_file(const std::filesystem::path& file_path,const AppSettings& settings);
+
+
     // -------------------------------------------------------------------------
     // Settings class
     // -------------------------------------------------------------------------
@@ -79,7 +88,8 @@ namespace aknet::settings {
         std::shared_ptr<const AppSettings> snapshot();
 
     private:
-        AppSettings defaults_{}; // compile-time defaults
+        AppSettings defaults_{};
+        std::shared_ptr<const AppSettings> snapshot_;
         SettingsConfig config_;
 
         bool initialized_ = false;

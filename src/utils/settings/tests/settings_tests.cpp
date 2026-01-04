@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 
 #include <logger.h>
@@ -140,6 +141,8 @@ TEST_CASE("Settings | Creation", "[settings]") {
         CHECK(snapshot->audio.sampling_rate == 48000);
         CHECK(snapshot->audio.buffer_size == 256);
 
+        test_settings.shutdown();
+
         log::shutdown();
 
     }
@@ -169,6 +172,157 @@ TEST_CASE("Settings | JSON Helpers", "[settings]") {
         REQUIRE(destination_app_settings.audio.sampling_rate == 48000);
         REQUIRE(destination_app_settings.audio.buffer_size == 256);
 
+    }
+
+    SECTION("reading an AppSettings object from a JSON file works") {
+
+        TempDir temp_dir;
+
+        const std::string test_json_string = R"({"audio":{"buffer_size":256,"sampling_rate":48000},"general":{"log_level":"debug"},"schema_version":1})";
+
+        auto test_file_path = temp_dir.path() / "test_json_settings.json";
+        std::ofstream out_file(test_file_path);
+
+        REQUIRE(out_file.is_open());
+
+        out_file << test_json_string;
+        out_file.close();
+
+        auto destination_app_settings = settings::AppSettings{};
+
+        //Purposefully changing values
+        destination_app_settings.general.log_level = "trace";
+        destination_app_settings.audio.sampling_rate = 44100;
+        destination_app_settings.audio.buffer_size = 512;
+
+        auto read_result = settings::from_json_file(test_file_path,destination_app_settings);
+
+        REQUIRE(read_result.ok);
+
+        REQUIRE(destination_app_settings.general.log_level == "debug");
+        REQUIRE(destination_app_settings.audio.sampling_rate == 48000);
+        REQUIRE(destination_app_settings.audio.buffer_size == 256);
 
     }
+
+    SECTION("writing an AppSettings object to a JSON file creates file and it parses") {
+
+        TempDir temp_dir;
+        auto test_file_path = temp_dir.path() / "test_json_settings.json";
+        auto test_app_settings = settings::AppSettings{};
+
+        auto write_result = settings::to_json_file(test_file_path,test_app_settings);
+
+        REQUIRE(write_result.ok);
+        REQUIRE(fs::exists(test_file_path));
+
+        auto read_app_settings = settings::AppSettings{};
+        auto read_result = settings::from_json_file(test_file_path,read_app_settings);
+
+        REQUIRE(read_result.ok);
+
+        REQUIRE(read_app_settings.general.log_level == "debug");
+        REQUIRE(read_app_settings.audio.sampling_rate == 48000);
+        REQUIRE(read_app_settings.audio.buffer_size == 256);
+
+    }
+
+    SECTION("writing an AppSettings object to a JSON file creates parent directories") {
+
+        TempDir temp_dir;
+        auto test_file_path = temp_dir.path() / "nested_a" / "nested_b" / "test_json_settings.json";
+
+        auto test_app_settings = settings::AppSettings{};
+
+        auto write_result = settings::to_json_file(test_file_path,test_app_settings);
+
+        REQUIRE(write_result.ok);
+        REQUIRE(fs::exists(test_file_path));
+
+    }
+
+    SECTION("overwriting an AppSettings object to an existing JSON file works and it parses") {
+
+        TempDir temp_dir;
+        auto test_file_path = temp_dir.path() / "test_json_settings.json";
+        auto test_app_settings = settings::AppSettings{};
+
+        auto write_result = settings::to_json_file(test_file_path,test_app_settings);
+
+        REQUIRE(write_result.ok);
+        REQUIRE(fs::exists(test_file_path));
+
+        test_app_settings.general.log_level = "trace";
+        test_app_settings.audio.sampling_rate = 44100;
+
+        write_result = settings::to_json_file(test_file_path,test_app_settings);
+
+        REQUIRE(write_result.ok);
+        REQUIRE(fs::exists(test_file_path));
+
+        auto read_app_settings = settings::AppSettings{};
+        auto read_result = settings::from_json_file(test_file_path,read_app_settings);
+
+        REQUIRE(read_result.ok);
+
+        REQUIRE(read_app_settings.general.log_level == "trace");
+        REQUIRE(read_app_settings.audio.sampling_rate == 44100);
+        REQUIRE(read_app_settings.audio.buffer_size == 256);
+
+    }
+
+    SECTION("reading an invalid JSON file returns an error") {
+
+        TempDir temp_dir;
+
+        const std::string test_json_string = "{";
+
+        auto test_file_path = temp_dir.path() / "test_json_settings.json";
+        std::ofstream out_file(test_file_path);
+
+        REQUIRE(out_file.is_open());
+
+        out_file << test_json_string;
+        out_file.close();
+
+        auto destination_app_settings = settings::AppSettings{};
+
+        auto read_result = settings::from_json_file(test_file_path,destination_app_settings);
+
+        REQUIRE_FALSE(read_result.ok);
+
+    }
+
+    SECTION("reading a valid JSON file with unknown keys works and unknown keys are ignored") {
+
+        TempDir temp_dir;
+
+        const std::string test_json_string = R"({"audio":{"buffer_size":256,"sampling_rate":48000},"general":{"log_level":"debug"},"schema_version":1,"unknown":true})";
+
+        auto test_file_path = temp_dir.path() / "test_json_settings.json";
+        std::ofstream out_file(test_file_path);
+
+        REQUIRE(out_file.is_open());
+
+        out_file << test_json_string;
+        out_file.close();
+
+        auto destination_app_settings = settings::AppSettings{};
+
+        //Purposefully changing values
+        destination_app_settings.general.log_level = "trace";
+        destination_app_settings.audio.sampling_rate = 44100;
+        destination_app_settings.audio.buffer_size = 512;
+
+        auto read_result = settings::from_json_file(test_file_path,destination_app_settings);
+
+        REQUIRE(read_result.ok);
+
+        REQUIRE(destination_app_settings.general.log_level == "debug");
+        REQUIRE(destination_app_settings.audio.sampling_rate == 48000);
+        REQUIRE(destination_app_settings.audio.buffer_size == 256);
+
+    }
+
+
 }
