@@ -6,6 +6,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <filesystem>
 #include <fstream>
+#include <algorithm>
 #include <functional>
 #include <iostream>
 
@@ -497,7 +498,8 @@ TEST_CASE("Settings | Pending and Save", "[settings]") {
         REQUIRE(test_settings.pending_copy().general.log_level == "trace");
 
         // Save applies + persists
-        REQUIRE(test_settings.save().ok);
+        auto save_result = test_settings.save();
+        REQUIRE(save_result.result.ok);
 
         REQUIRE_FALSE(test_settings.has_pending_changes());
         REQUIRE(test_settings.snapshot()->general.log_level == "trace");
@@ -568,7 +570,10 @@ TEST_CASE("Settings | Import and Export", "[settings]") {
             s.general.log_level = "trace";
             s.audio.sampling_rate = 44100;
         }).ok);
-        REQUIRE(test_settings.save().ok);
+        {
+            auto save_result = test_settings.save();
+            REQUIRE(save_result.result.ok);
+        }
 
         REQUIRE(test_settings.snapshot()->general.log_level == "trace");
         REQUIRE(test_settings.snapshot()->audio.sampling_rate == 44100);
@@ -605,7 +610,10 @@ TEST_CASE("Settings | Import and Export", "[settings]") {
         REQUIRE(pending.audio.buffer_size == 1024);
 
         // Save applies import to active + persists to main settings path
-        REQUIRE(test_settings.save().ok);
+        {
+            auto save_result = test_settings.save();
+            REQUIRE(save_result.result.ok);
+        }
         REQUIRE_FALSE(test_settings.has_pending_changes());
 
         REQUIRE(test_settings.snapshot()->general.log_level == "info");
@@ -617,6 +625,76 @@ TEST_CASE("Settings | Import and Export", "[settings]") {
         REQUIRE(disk_settings.general.log_level == "info");
         REQUIRE(disk_settings.audio.sampling_rate == 32000);
         REQUIRE(disk_settings.audio.buffer_size == 1024);
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+}
+
+TEST_CASE("Settings | Restart Rules and Impact", "[settings]") {
+
+    SECTION("save computes impact for restart-sensitive keys") {
+        TempDir temp_dir;
+
+        log::init();
+        auto test_logger = log::get("settings");
+
+        auto config = settings::SettingsConfig{
+            .base_dir = temp_dir.path(),
+            .file_name = "aknet_test_settings_restart_rules.json",
+            .schema_version = 1
+        };
+
+        settings::Settings test_settings;
+        test_settings.init(test_logger, config);
+        REQUIRE(test_settings.load_or_create().ok);
+
+        // Define a couple of manual rules
+        test_settings.add_restart_rule(settings::RestartRule{
+            .key = "general.test_restart_impact",
+            .requires_app_restart = true,
+            .module_name_to_restart = ""
+        });
+        test_settings.add_restart_rule(settings::RestartRule{
+            .key = "audio.buffer_size",
+            .requires_app_restart = false,
+            .module_name_to_restart = "audio"
+        });
+
+        auto rules = test_settings.get_restart_rules();
+        REQUIRE(rules.size() >= 2);
+
+        // Changing a non-sensitive key has no impact
+        REQUIRE(test_settings.stage([](settings::AppSettings& s) {
+            s.general.log_level = "trace";
+        }).ok);
+
+        auto save1 = test_settings.save();
+        REQUIRE(save1.result.ok);
+        REQUIRE_FALSE(save1.save_impact.app_restart_required);
+        REQUIRE(save1.save_impact.modules_restart_required.empty());
+        REQUIRE(save1.save_impact.restart_sensitive_keys_changed.empty());
+
+        // Changing restart-sensitive keys has an impact
+        REQUIRE(test_settings.stage([](settings::AppSettings& s) {
+            s.general.test_restart_impact = 42;
+            s.audio.buffer_size = 2048;
+        }).ok);
+
+        auto save2 = test_settings.save();
+        REQUIRE(save2.result.ok);
+
+        REQUIRE(save2.save_impact.app_restart_required);
+        REQUIRE(std::find(save2.save_impact.modules_restart_required.begin(),
+                          save2.save_impact.modules_restart_required.end(),
+                          "audio") != save2.save_impact.modules_restart_required.end());
+
+        REQUIRE(std::find(save2.save_impact.restart_sensitive_keys_changed.begin(),
+                          save2.save_impact.restart_sensitive_keys_changed.end(),
+                          "general.test_restart_impact") != save2.save_impact.restart_sensitive_keys_changed.end());
+        REQUIRE(std::find(save2.save_impact.restart_sensitive_keys_changed.begin(),
+                          save2.save_impact.restart_sensitive_keys_changed.end(),
+                          "audio.buffer_size") != save2.save_impact.restart_sensitive_keys_changed.end());
 
         test_settings.shutdown();
         log::shutdown();

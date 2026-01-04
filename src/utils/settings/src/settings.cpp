@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <algorithm>
 #include <memory>
 #include <ranges>
 #include <iostream>
@@ -14,6 +15,49 @@
 #include <nlohmann/json.hpp>
 
 namespace aknet::settings {
+
+    namespace {
+        bool key_changed(const std::string& key, const AppSettings& old_settings, const AppSettings& new_settings) {
+            if (key == "general.log_level") {
+                return old_settings.general.log_level != new_settings.general.log_level;
+            }
+
+            if (key == "general.test_restart_impact") {
+                return old_settings.general.test_restart_impact != new_settings.general.test_restart_impact;
+            }
+
+            if (key == "audio.sampling_rate") {
+                return old_settings.audio.sampling_rate != new_settings.audio.sampling_rate;
+            }
+
+            if (key == "audio.buffer_size") {
+                return old_settings.audio.buffer_size != new_settings.audio.buffer_size;
+            }
+
+            return false;
+        }
+
+        void add_unique(std::vector<std::string>& items, const std::string& value) {
+            if (value.empty()) {
+                return;
+            }
+
+            if (std::find(items.begin(), items.end(), value) == items.end()) {
+                items.push_back(value);
+            }
+        }
+
+        std::string join_strings(const std::vector<std::string>& items, std::string_view sep) {
+            std::string out;
+            for (std::size_t i = 0; i < items.size(); ++i) {
+                if (i > 0) {
+                    out += sep;
+                }
+                out += items[i];
+            }
+            return out;
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Helpers
@@ -238,6 +282,16 @@ namespace aknet::settings {
         return pending_json != snapshot_json;
     }
 
+    void Settings::add_restart_rule(RestartRule rule) {
+        std::lock_guard lock(pending_mutex_);
+        restart_rules_.push_back(std::move(rule));
+    }
+
+    std::vector<RestartRule> Settings::get_restart_rules() {
+        std::lock_guard lock(pending_mutex_);
+        return restart_rules_;
+    }
+
     std::filesystem::path Settings::path() {
         return config_.base_dir / config_.file_name;
     }
@@ -251,17 +305,14 @@ namespace aknet::settings {
         auto settings_file_path = path();
 
         if (!initialized_) {
-            logger_->error("Cannot load or create settings: Settings system not initialized");
             return Result{.ok = false, .error = "Settings system not initialized before load or create"};
         }
 
         if (config_.base_dir.empty()) {
-            logger_->error("Cannot load or create settings: Settings base directory not set");
             return Result{.ok = false, .error = "Settings base directory not set"};
         }
 
         if (settings_file_path.empty()) {
-            logger_->error("Cannot load or create settings: Settings file path not set");
             return Result{.ok = false, .error = "Settings file path not set"};
         }
 
@@ -330,32 +381,83 @@ namespace aknet::settings {
         return Result{.ok = true};
     }
 
-    Result Settings::save() {
+    Settings::SaveResult Settings::save() {
 
         logger_->info("Saving pending settings changes...");
 
+        SaveImpact impact;
+
         if (!initialized_) {
-            logger_->error("Cannot save pending settings changes: Settings system not initialized before save");
-            return Result{.ok = false, .error = "Settings not initialized before save"};
+            return SaveResult{.result = Result{.ok = false, .error = "Settings not initialized before save"}, .save_impact = impact};
         }
 
+        if (!snapshot_) {
+            return SaveResult{.result = Result{.ok = false, .error = "Settings snapshot is null"}, .save_impact = impact};
+        }
+
+        const AppSettings old_settings = *snapshot_;
+
         AppSettings to_save;
-        std::lock_guard lock(pending_mutex_);
-        to_save = pending_;
+        std::vector<RestartRule> restart_rules_copy;
+        {
+            std::lock_guard lock(pending_mutex_);
+            to_save = pending_;
+            restart_rules_copy = restart_rules_;
+        }
+
 
         Result write_result = to_json_file(path(), to_save);
 
         if (!write_result.ok) {
             logger_->error("Failed to save settings to file {}: {}", path().string(), write_result.error);
-            return Result{.ok = false, .error = "Failed to save settings to file " + path().string() + ": " + write_result.error};
+            return SaveResult{.result = Result{.ok = false, .error = "Failed to save settings to file " + path().string() + ": " + write_result.error}, .save_impact = impact};
         }
 
-        snapshot_ = std::make_shared<const AppSettings>(to_save);
-        pending_ = to_save;
+        // Compute impact based on manual restart rules list.
+
+        for (const auto& rule : restart_rules_copy) {
+            if (!key_changed(rule.key, old_settings, to_save)) {
+                continue;
+            }
+
+            add_unique(impact.restart_sensitive_keys_changed, rule.key);
+
+            if (rule.requires_app_restart) {
+                impact.app_restart_required = true;
+            }
+
+            if (!rule.module_name_to_restart.empty()) {
+                add_unique(impact.modules_restart_required, rule.module_name_to_restart);
+            }
+        }
+
+        {
+            std::lock_guard lock(pending_mutex_);
+            snapshot_ = std::make_shared<const AppSettings>(to_save);
+            pending_ = to_save;
+        }
 
         logger_->info("Settings saved successfully.");
 
-        return Result{.ok = true};  
+        if (!impact.restart_sensitive_keys_changed.empty()) {
+            logger_->warn(
+                "Restart-sensitive settings changed: {}",
+                join_strings(impact.restart_sensitive_keys_changed, ", ")
+            );
+        }
+
+        if (!impact.modules_restart_required.empty()) {
+            logger_->warn(
+                "Module restart required for: {}",
+                join_strings(impact.modules_restart_required, ", ")
+            );
+        }
+
+        if (impact.app_restart_required) {
+            logger_->warn("Application restart required for settings to take effect.");
+        }
+
+        return SaveResult{.result = Result{.ok = true}, .save_impact = impact};
 
     }
 
@@ -364,7 +466,6 @@ namespace aknet::settings {
         logger_->info("Exporting current settings to file...");
 
         if (!initialized_) {
-            logger_->error("Cannot export settings: Settings system not initialized before export");
             return Result{.ok = false, .error = "Settings not initialized before export"};
         }
 
@@ -388,7 +489,6 @@ namespace aknet::settings {
         logger_->info("Importing settings from file... : {}", file_path.string());
 
         if (!initialized_) {
-            logger_->error("Cannot import settings: Settings system not initialized before import");
             return Result{.ok = false, .error = "Settings not initialized before export"};
         }
 

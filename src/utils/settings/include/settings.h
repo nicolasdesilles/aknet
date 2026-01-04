@@ -15,6 +15,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <vector>
 #include <nlohmann/json.hpp>
 
 namespace aknet::settings {
@@ -24,6 +25,7 @@ namespace aknet::settings {
 
     struct General {
         std::string log_level = "debug";
+        int test_restart_impact = 0;
     };
 
     struct Audio {
@@ -38,13 +40,31 @@ namespace aknet::settings {
     };
 
     // JSON (de)serialization (required for: nlohmann::json j = settings;)
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(General, log_level);
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(General, log_level, test_restart_impact);
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Audio, sampling_rate, buffer_size);
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(AppSettings, schema_version, general, audio);
 
     // -------------------------------------------------------------------------
     // Settings system
     // -------------------------------------------------------------------------
+
+    struct RestartRule {
+        std::string key;
+        bool requires_app_restart = false;
+        std::string module_name_to_restart;
+    };
+
+    enum class RestartImpact {
+        None,
+        ModuleRestartRequired,
+        AppRestartRequired
+    };
+
+    struct SaveImpact {
+        bool app_restart_required = false;
+        std::vector<std::string> modules_restart_required;
+        std::vector<std::string> restart_sensitive_keys_changed;
+    };
 
     struct SettingsConfig {
         std::filesystem::path base_dir;     // same as logs dir for now
@@ -86,6 +106,9 @@ namespace aknet::settings {
         bool is_initialized();
         bool has_pending_changes();
 
+        void add_restart_rule(RestartRule rule);
+        std::vector<RestartRule> get_restart_rules();
+
         std::filesystem::path path();
 
         // Read (active snapshot)
@@ -100,7 +123,11 @@ namespace aknet::settings {
         Result reset_pending_to_active();
 
         // Save
-        Result save();
+        struct SaveResult {
+            Result result;
+            SaveImpact save_impact;
+        };
+        SaveResult save();
 
         // File Import/Export
         Result export_to_file(const std::filesystem::path& file_path);
@@ -108,6 +135,8 @@ namespace aknet::settings {
 
     private:
         mutable std::mutex pending_mutex_;
+
+        std::vector<RestartRule> restart_rules_;
 
         AppSettings defaults_{};
         AppSettings pending_{};
