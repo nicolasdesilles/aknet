@@ -118,6 +118,12 @@ namespace aknet::settings {
 
     Result to_json_file(const std::filesystem::path &file_path, const AppSettings &settings) {
 
+        if (std::filesystem::exists(file_path) && std::filesystem::is_directory(file_path)) {
+            return Result{
+                .ok = false,
+                .error = "Target path " + file_path.string() + " is a directory"};
+        }
+
         std::filesystem::path parent_dir;
         try {
             parent_dir = file_path.parent_path();
@@ -276,6 +282,11 @@ namespace aknet::settings {
     }
 
     bool Settings::has_pending_changes() {
+
+        if (!snapshot_) {
+            return false;
+        }
+
         std::lock_guard lock(pending_mutex_);
         nlohmann::json pending_json = pending_;
         nlohmann::json snapshot_json = *snapshot_;
@@ -376,6 +387,9 @@ namespace aknet::settings {
     }
 
     Result Settings::reset_pending_to_active() {
+        if (!initialized_ || !snapshot_) {
+            return Result{.ok = false, .error = "Settings not initialized"};
+        }
         std::lock_guard lock(pending_mutex_);
         pending_ = *snapshot_;;
         return Result{.ok = true};
@@ -383,13 +397,13 @@ namespace aknet::settings {
 
     Settings::SaveResult Settings::save() {
 
-        logger_->info("Saving pending settings changes...");
-
         SaveImpact impact;
 
         if (!initialized_) {
             return SaveResult{.result = Result{.ok = false, .error = "Settings not initialized before save"}, .save_impact = impact};
         }
+
+        logger_->info("Saving pending settings changes...");
 
         if (!snapshot_) {
             return SaveResult{.result = Result{.ok = false, .error = "Settings snapshot is null"}, .save_impact = impact};
@@ -463,11 +477,11 @@ namespace aknet::settings {
 
     Result Settings::export_to_file(const std::filesystem::path &file_path) {
 
-        logger_->info("Exporting current settings to file...");
-
         if (!initialized_) {
             return Result{.ok = false, .error = "Settings not initialized before export"};
         }
+
+        logger_->info("Exporting current settings to file...");
 
         auto current_settings = *snapshot_;
 
@@ -486,11 +500,11 @@ namespace aknet::settings {
 
     Result Settings::import_from_file(const std::filesystem::path &file_path) {
 
-        logger_->info("Importing settings from file... : {}", file_path.string());
-
         if (!initialized_) {
             return Result{.ok = false, .error = "Settings not initialized before export"};
         }
+
+        logger_->info("Importing settings from file... : {}", file_path.string());
 
         AppSettings imported = defaults_;
 
