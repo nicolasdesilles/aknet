@@ -326,3 +326,134 @@ TEST_CASE("Settings | JSON Helpers", "[settings]") {
 
 
 }
+
+TEST_CASE("Settings | Load from file or Create", "[settings]") {
+
+    SECTION("if there is no existing settings file in base_dir, creates file with defaults + publishes defaults") {
+
+        TempDir temp_dir;
+        log::init();
+        auto test_logger = log::get("settings");
+
+        auto config = settings::SettingsConfig{
+            .base_dir = temp_dir.path(),
+            .file_name = "aknet_test_settings.json",
+            .schema_version = 1
+        };
+
+        auto test_settings = settings::Settings();
+
+        REQUIRE_NOTHROW(test_settings.init(test_logger, config));
+
+        // verify that there is NO initial settings file before loading
+        REQUIRE_FALSE(fs::exists(test_settings.path()));
+
+        auto load_result = test_settings.load_or_create();
+
+        REQUIRE(load_result.ok);
+
+        REQUIRE(fs::exists(test_settings.path()));
+
+        auto snapshot = test_settings.snapshot();
+
+        REQUIRE(snapshot != nullptr);
+        CHECK(snapshot->schema_version == 1);
+        CHECK(snapshot->general.log_level == "debug");
+        CHECK(snapshot->audio.sampling_rate == 48000);
+        CHECK(snapshot->audio.buffer_size == 256);
+
+        test_settings.shutdown();
+
+        log::shutdown();
+
+    }
+
+    SECTION("loads an existing settings file correctly") {
+
+        TempDir temp_dir;
+        log::init();
+        auto test_logger = log::get("settings");
+
+        const std::string test_json_string = R"({"audio":{"buffer_size":512,"sampling_rate":44100},"general":{"log_level":"trace"},"schema_version":1})";
+
+        auto test_file_path = temp_dir.path() / "aknet_test_settings.json";
+        std::ofstream out_file(test_file_path);
+
+        REQUIRE(out_file.is_open());
+
+        out_file << test_json_string;
+        out_file.close();
+
+        auto config = settings::SettingsConfig{
+            .base_dir = temp_dir.path(),
+            .file_name = "aknet_test_settings.json",
+            .schema_version = 1
+        };
+
+        auto test_settings = settings::Settings();
+
+        REQUIRE_NOTHROW(test_settings.init(test_logger, config));
+
+        auto load_result = test_settings.load_or_create();
+
+        REQUIRE(load_result.ok);
+
+        auto snapshot = test_settings.snapshot();
+
+        REQUIRE(snapshot != nullptr);
+        CHECK(snapshot->schema_version == 1);
+        CHECK(snapshot->general.log_level == "trace");
+        CHECK(snapshot->audio.sampling_rate == 44100);
+        CHECK(snapshot->audio.buffer_size == 512);
+
+        test_settings.shutdown();
+
+        log::shutdown();
+
+    }
+
+    SECTION("loading an invalid settings file returns an error and snapshot stays intact") {
+
+        TempDir temp_dir;
+        log::init();
+        auto test_logger = log::get("settings");
+
+        const std::string test_json_string = "{";
+
+        auto test_file_path = temp_dir.path() / "aknet_test_settings.json";
+        std::ofstream out_file(test_file_path);
+
+        REQUIRE(out_file.is_open());
+
+        out_file << test_json_string;
+        out_file.close();
+
+        auto config = settings::SettingsConfig{
+            .base_dir = temp_dir.path(),
+            .file_name = "aknet_test_settings.json",
+            .schema_version = 1
+        };
+
+        auto test_settings = settings::Settings();
+
+        REQUIRE_NOTHROW(test_settings.init(test_logger, config));
+
+        auto load_result = test_settings.load_or_create();
+
+        REQUIRE_FALSE(load_result.ok);
+
+        auto snapshot = test_settings.snapshot();
+
+        REQUIRE(snapshot != nullptr);
+        CHECK(snapshot->schema_version == 1);
+        CHECK(snapshot->general.log_level == "debug");
+        CHECK(snapshot->audio.sampling_rate == 48000);
+        CHECK(snapshot->audio.buffer_size == 256);
+
+        test_settings.shutdown();
+
+        log::shutdown();
+
+    }
+
+}

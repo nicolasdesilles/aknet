@@ -87,6 +87,9 @@ namespace aknet::settings {
         // Read (active snapshot)
         std::shared_ptr<const AppSettings> snapshot();
 
+        // Load settings from file and if file does not exist at location create one with default values
+        Result load_or_create();
+
     private:
         AppSettings defaults_{};
         std::shared_ptr<const AppSettings> snapshot_;

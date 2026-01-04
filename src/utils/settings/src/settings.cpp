@@ -212,6 +212,9 @@ namespace aknet::settings {
         config_ = std::move(config);
         snapshot_ = std::make_shared<const AppSettings>(defaults_);
         initialized_ = true;
+
+        logger_->info("Settings system initialized.");
+
     }
 
     void Settings::shutdown() {
@@ -232,5 +235,67 @@ namespace aknet::settings {
 
     std::shared_ptr<const AppSettings> Settings::snapshot() {
         return snapshot_;
+    }
+
+    Result Settings::load_or_create() {
+
+        auto settings_file_path = path();
+
+        if (!initialized_) {
+            return Result{.ok = false, .error = "Settings not initialized before load or create"};
+        }
+
+        if (config_.base_dir.empty()) {
+            return Result{.ok = false, .error = "Settings base directory not set"};
+        }
+
+        if (settings_file_path.empty()) {
+            return Result{.ok = false, .error = "Settings file path not set"};
+        }
+
+        try {
+            std::filesystem::create_directories(settings_file_path.parent_path());
+        }
+        catch (std::filesystem::filesystem_error& e) {
+            logger_->error("On settings load_or_create, could not create settings file parent directory: {}", e.what());
+            return Result{.ok = false, .error = e.what()};
+        }
+
+        if (exists(settings_file_path)) {
+
+            logger_->info("Settings file {} exists, loading...", settings_file_path.string());
+
+            AppSettings loaded_settings;
+
+            Result load_result = from_json_file(settings_file_path, loaded_settings);
+            if (!load_result.ok) {
+                logger_->error("Failed to load settings from file {}: {}", settings_file_path.string(), load_result.error);
+                return Result{.ok = false, .error = "Failed to load settings from file " + settings_file_path.string() + ": " + load_result.error};
+            }
+
+            // Schema version check
+            if (loaded_settings.schema_version != config_.schema_version) {
+                logger_->warn("Settings file {} schema version mismatch ({} != {})", settings_file_path.string(), loaded_settings.schema_version, defaults_.schema_version);
+            }
+            snapshot_ = std::make_shared<const AppSettings>(loaded_settings);
+            logger_->info("Settings loaded successfully");
+
+        }
+        else {
+
+            logger_->info("Settings file {} does not exist, creating with defaults...", settings_file_path.string());
+
+            Result export_result = to_json_file(settings_file_path, defaults_);
+
+            if (!export_result.ok) {
+                return Result{.ok = false, .error = "Failed to export default settings to file " + settings_file_path.string() + ": " + export_result.error};
+            }
+
+            snapshot_ = std::make_shared<const AppSettings>(defaults_);
+            logger_->info("Settings loaded successfully from default values.");
+        }
+
+        return Result{.ok = true};
+
     }
 }
