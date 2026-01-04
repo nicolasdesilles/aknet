@@ -48,3 +48,9 @@ CPMAddPackage(
         CPM_DONT_UPDATE_MODULE_PATH
 )
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR}/_deps/catch2-src/extras)
+
+# --------------------------------------------------------------------------------------------------------
+# JSON
+# --------------------------------------------------------------------------------------------------------
+
+CPMAddPackage("gh:nlohmann/json@3.12.0")

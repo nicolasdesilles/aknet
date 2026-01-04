@@ -9,12 +9,17 @@
 
 #include <memory>
 #include <filesystem>
+
+// aknet utils and modules
 #include <logger.h>
+#include <settings.h>
 
 namespace aknet {
 
     struct core_config {
         std::filesystem::path log_dir = {};
+        std::filesystem::path settings_dir = {};
+        int settings_schema_version = 1;
         log::LogLevel log_level = log::LogLevel::info;
     };
 
@@ -32,6 +37,8 @@ namespace aknet {
 
         // Future: accessors for owned modules
         // ModuleA& module_a();
+
+        settings::Settings settings_;
 
     private:
         std::shared_ptr<log::Logger> logger_;
