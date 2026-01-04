@@ -211,6 +211,7 @@ namespace aknet::settings {
         logger_ = std::move(logger);
         config_ = std::move(config);
         snapshot_ = std::make_shared<const AppSettings>(defaults_);
+        pending_ = *snapshot_;
         initialized_ = true;
 
         logger_->info("Settings system initialized.");
@@ -222,11 +223,19 @@ namespace aknet::settings {
         logger_ = nullptr;
         config_ = {};
         snapshot_ = nullptr;
+        pending_ = {};
         initialized_ = false;
     }
 
     bool Settings::is_initialized() {
         return initialized_;
+    }
+
+    bool Settings::has_pending_changes() {
+        std::lock_guard lock(pending_mutex_);
+        nlohmann::json pending_json = pending_;
+        nlohmann::json snapshot_json = *snapshot_;
+        return pending_json != snapshot_json;
     }
 
     std::filesystem::path Settings::path() {
@@ -242,14 +251,17 @@ namespace aknet::settings {
         auto settings_file_path = path();
 
         if (!initialized_) {
-            return Result{.ok = false, .error = "Settings not initialized before load or create"};
+            logger_->error("Cannot load or create settings: Settings system not initialized");
+            return Result{.ok = false, .error = "Settings system not initialized before load or create"};
         }
 
         if (config_.base_dir.empty()) {
+            logger_->error("Cannot load or create settings: Settings base directory not set");
             return Result{.ok = false, .error = "Settings base directory not set"};
         }
 
         if (settings_file_path.empty()) {
+            logger_->error("Cannot load or create settings: Settings file path not set");
             return Result{.ok = false, .error = "Settings file path not set"};
         }
 
@@ -278,6 +290,7 @@ namespace aknet::settings {
                 logger_->warn("Settings file {} schema version mismatch ({} != {})", settings_file_path.string(), loaded_settings.schema_version, defaults_.schema_version);
             }
             snapshot_ = std::make_shared<const AppSettings>(loaded_settings);
+            pending_ = *snapshot_;
             logger_->info("Settings loaded successfully");
 
         }
@@ -292,8 +305,106 @@ namespace aknet::settings {
             }
 
             snapshot_ = std::make_shared<const AppSettings>(defaults_);
+            pending_ = *snapshot_;
             logger_->info("Settings loaded successfully from default values.");
         }
+
+        return Result{.ok = true};
+
+    }
+
+    AppSettings Settings::pending_copy() {
+        std::lock_guard lock(pending_mutex_);
+        return pending_;
+    }
+
+    Result Settings::stage(std::function<void(AppSettings &)> mutator) {
+        std::lock_guard lock(pending_mutex_);
+        mutator(pending_);
+        return Result{.ok = true};
+    }
+
+    Result Settings::reset_pending_to_active() {
+        std::lock_guard lock(pending_mutex_);
+        pending_ = *snapshot_;;
+        return Result{.ok = true};
+    }
+
+    Result Settings::save() {
+
+        logger_->info("Saving pending settings changes...");
+
+        if (!initialized_) {
+            logger_->error("Cannot save pending settings changes: Settings system not initialized before save");
+            return Result{.ok = false, .error = "Settings not initialized before save"};
+        }
+
+        AppSettings to_save;
+        std::lock_guard lock(pending_mutex_);
+        to_save = pending_;
+
+        Result write_result = to_json_file(path(), to_save);
+
+        if (!write_result.ok) {
+            logger_->error("Failed to save settings to file {}: {}", path().string(), write_result.error);
+            return Result{.ok = false, .error = "Failed to save settings to file " + path().string() + ": " + write_result.error};
+        }
+
+        snapshot_ = std::make_shared<const AppSettings>(to_save);
+        pending_ = to_save;
+
+        logger_->info("Settings saved successfully.");
+
+        return Result{.ok = true};  
+
+    }
+
+    Result Settings::export_to_file(const std::filesystem::path &file_path) {
+
+        logger_->info("Exporting current settings to file...");
+
+        if (!initialized_) {
+            logger_->error("Cannot export settings: Settings system not initialized before export");
+            return Result{.ok = false, .error = "Settings not initialized before export"};
+        }
+
+        auto current_settings = *snapshot_;
+
+        Result export_result = to_json_file(file_path, current_settings);
+
+        if (!export_result.ok) {
+            logger_->error("Failed to export settings to file {}: {}", file_path.string(), export_result.error);
+            return Result{.ok = false, .error = "Failed to export settings to file " + file_path.string() + ": " + export_result.error};
+        }
+
+        logger_->info("Settings exported successfully.");
+
+        return Result{.ok = true};
+
+    }
+
+    Result Settings::import_from_file(const std::filesystem::path &file_path) {
+
+        logger_->info("Importing settings from file... : {}", file_path.string());
+
+        if (!initialized_) {
+            logger_->error("Cannot import settings: Settings system not initialized before import");
+            return Result{.ok = false, .error = "Settings not initialized before export"};
+        }
+
+        AppSettings imported = defaults_;
+
+        Result import_result = from_json_file(file_path, imported);
+
+        if (!import_result.ok) {
+            logger_->error("Failed to import settings from file {}: {}", file_path.string(), import_result.error);
+            return Result{.ok = false, .error = "Failed to import settings from file " + file_path.string() + ": " + import_result.error};
+        }
+
+        std::lock_guard lock(pending_mutex_);
+        pending_ = imported;
+
+        logger_->info("Settings imported successfully into pending changes.");
 
         return Result{.ok = true};
 

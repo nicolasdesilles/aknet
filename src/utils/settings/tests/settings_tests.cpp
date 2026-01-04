@@ -6,6 +6,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 
 #include <logger.h>
@@ -456,4 +457,168 @@ TEST_CASE("Settings | Load from file or Create", "[settings]") {
 
     }
 
+}
+
+TEST_CASE("Settings | Pending and Save", "[settings]") {
+
+    SECTION("staging changes does not affect snapshot until save") {
+        TempDir temp_dir;
+
+        log::init();
+        auto test_logger = log::get("settings");
+
+        auto config = settings::SettingsConfig{
+            .base_dir = temp_dir.path(),
+            .file_name = "aknet_test_settings_pending.json",
+            .schema_version = 1
+        };
+
+        settings::Settings test_settings;
+        test_settings.init(test_logger, config);
+
+        REQUIRE(test_settings.load_or_create().ok);
+
+        // Initial state
+        REQUIRE_FALSE(test_settings.has_pending_changes());
+        REQUIRE(test_settings.snapshot()->general.log_level == "debug");
+        REQUIRE(test_settings.pending_copy().general.log_level == "debug");
+
+        // Stage a change
+        REQUIRE(test_settings.stage([](settings::AppSettings& s) {
+            s.general.log_level = "trace";
+        }).ok);
+
+        REQUIRE(test_settings.has_pending_changes());
+
+        // Snapshot unchanged
+        REQUIRE(test_settings.snapshot()->general.log_level == "debug");
+
+        // Pending changed
+        REQUIRE(test_settings.pending_copy().general.log_level == "trace");
+
+        // Save applies + persists
+        REQUIRE(test_settings.save().ok);
+
+        REQUIRE_FALSE(test_settings.has_pending_changes());
+        REQUIRE(test_settings.snapshot()->general.log_level == "trace");
+        REQUIRE(test_settings.pending_copy().general.log_level == "trace");
+
+        settings::AppSettings disk_settings{};
+        REQUIRE(settings::from_json_file(test_settings.path(), disk_settings).ok);
+        REQUIRE(disk_settings.general.log_level == "trace");
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("reset_pending_to_active discards staged changes") {
+        TempDir temp_dir;
+
+        log::init();
+        auto test_logger = log::get("settings");
+
+        auto config = settings::SettingsConfig{
+            .base_dir = temp_dir.path(),
+            .file_name = "aknet_test_settings_reset.json",
+            .schema_version = 1
+        };
+
+        settings::Settings test_settings;
+        test_settings.init(test_logger, config);
+        REQUIRE(test_settings.load_or_create().ok);
+
+        REQUIRE(test_settings.stage([](settings::AppSettings& s) {
+            s.audio.sampling_rate = 44100;
+        }).ok);
+
+        REQUIRE(test_settings.has_pending_changes());
+        REQUIRE(test_settings.snapshot()->audio.sampling_rate == 48000);
+        REQUIRE(test_settings.pending_copy().audio.sampling_rate == 44100);
+
+        REQUIRE(test_settings.reset_pending_to_active().ok);
+        REQUIRE_FALSE(test_settings.has_pending_changes());
+        REQUIRE(test_settings.pending_copy().audio.sampling_rate == test_settings.snapshot()->audio.sampling_rate);
+        REQUIRE(test_settings.snapshot()->audio.sampling_rate == 48000);
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+}
+
+TEST_CASE("Settings | Import and Export", "[settings]") {
+
+    SECTION("export writes active snapshot, import stages only until save") {
+        TempDir temp_dir;
+
+        log::init();
+        auto test_logger = log::get("settings");
+
+        auto config = settings::SettingsConfig{
+            .base_dir = temp_dir.path(),
+            .file_name = "aknet_test_settings_main.json",
+            .schema_version = 1
+        };
+
+        settings::Settings test_settings;
+        test_settings.init(test_logger, config);
+        REQUIRE(test_settings.load_or_create().ok);
+
+        // Make active non-default
+        REQUIRE(test_settings.stage([](settings::AppSettings& s) {
+            s.general.log_level = "trace";
+            s.audio.sampling_rate = 44100;
+        }).ok);
+        REQUIRE(test_settings.save().ok);
+
+        REQUIRE(test_settings.snapshot()->general.log_level == "trace");
+        REQUIRE(test_settings.snapshot()->audio.sampling_rate == 44100);
+
+        // Export current snapshot
+        const fs::path export_path = temp_dir.path() / "exported_settings.json";
+        REQUIRE(test_settings.export_to_file(export_path).ok);
+        REQUIRE(fs::exists(export_path));
+
+        settings::AppSettings exported{};
+        REQUIRE(settings::from_json_file(export_path, exported).ok);
+        REQUIRE(exported.general.log_level == "trace");
+        REQUIRE(exported.audio.sampling_rate == 44100);
+
+        // Prepare an import file with different values
+        settings::AppSettings to_import{};
+        to_import.general.log_level = "info";
+        to_import.audio.sampling_rate = 32000;
+        to_import.audio.buffer_size = 1024;
+
+        const fs::path import_path = temp_dir.path() / "import_settings.json";
+        REQUIRE(settings::to_json_file(import_path, to_import).ok);
+
+        // Import should update pending only
+        REQUIRE(test_settings.import_from_file(import_path).ok);
+        REQUIRE(test_settings.has_pending_changes());
+
+        REQUIRE(test_settings.snapshot()->general.log_level == "trace");
+        REQUIRE(test_settings.snapshot()->audio.sampling_rate == 44100);
+
+        auto pending = test_settings.pending_copy();
+        REQUIRE(pending.general.log_level == "info");
+        REQUIRE(pending.audio.sampling_rate == 32000);
+        REQUIRE(pending.audio.buffer_size == 1024);
+
+        // Save applies import to active + persists to main settings path
+        REQUIRE(test_settings.save().ok);
+        REQUIRE_FALSE(test_settings.has_pending_changes());
+
+        REQUIRE(test_settings.snapshot()->general.log_level == "info");
+        REQUIRE(test_settings.snapshot()->audio.sampling_rate == 32000);
+        REQUIRE(test_settings.snapshot()->audio.buffer_size == 1024);
+
+        settings::AppSettings disk_settings{};
+        REQUIRE(settings::from_json_file(test_settings.path(), disk_settings).ok);
+        REQUIRE(disk_settings.general.log_level == "info");
+        REQUIRE(disk_settings.audio.sampling_rate == 32000);
+        REQUIRE(disk_settings.audio.buffer_size == 1024);
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
 }

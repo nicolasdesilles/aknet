@@ -10,7 +10,9 @@
 #include "logger.h"
 
 #include <filesystem>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <nlohmann/json.hpp>
@@ -80,7 +82,9 @@ namespace aknet::settings {
 
         void shutdown();
 
+        // Helpers
         bool is_initialized();
+        bool has_pending_changes();
 
         std::filesystem::path path();
 
@@ -90,8 +94,24 @@ namespace aknet::settings {
         // Load settings from file and if file does not exist at location create one with default values
         Result load_or_create();
 
+        // Staged editing
+        AppSettings pending_copy();
+        Result stage(std::function<void(AppSettings&)> mutator);
+        Result reset_pending_to_active();
+
+        // Save
+        Result save();
+
+        // File Import/Export
+        Result export_to_file(const std::filesystem::path& file_path);
+        Result import_from_file(const std::filesystem::path& file_path);
+
     private:
+        mutable std::mutex pending_mutex_;
+
         AppSettings defaults_{};
+        AppSettings pending_{};
+
         std::shared_ptr<const AppSettings> snapshot_;
         SettingsConfig config_;
 
