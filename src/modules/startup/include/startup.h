@@ -35,13 +35,13 @@ namespace aknet::startup {
         std::string display_name;
         StepStatus status = StepStatus::Pending;
         std::string message;
-        std::optional<std::chrono::time_point<std::chrono::system_clock>> start_time;
-        std::optional<std::chrono::time_point<std::chrono::system_clock>> end_time;
+        std::optional<std::chrono::time_point<std::chrono::steady_clock>> start_time;
+        std::optional<std::chrono::time_point<std::chrono::steady_clock>> end_time;
     };
 
     struct SequenceProgress {
         AppState state = AppState::Off;
-        int current_step_index = 0;
+        int current_step_index = -1;
         std::vector<StepProgress> steps;
         std::optional<std::string> last_error;
         bool can_retry = false;
@@ -56,9 +56,13 @@ namespace aknet::startup {
     // Helpers
     // -------------------------------------------------------------------------
 
+    StepProgress make_initial_step_progress(const StepConfig& config);
+
+    SequenceProgress make_initial_sequence_progress(AppState state, const std::vector<StepConfig>& configs);
+
     Result validate_step_config(const StepConfig& config);
 
-    Result validate_step_configs_unique(std::vector<StepConfig>& configs);
+    Result validate_step_configs_unique(const std::vector<StepConfig>& configs);
 
 }
 
