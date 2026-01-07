@@ -6,6 +6,7 @@ target_sources(aknet_startup
         PRIVATE
         src/startup.cpp
         src/startup_engine.cpp
+        src/startup_manager.cpp
         PUBLIC FILE_SET HEADERS
         BASE_DIRS include
         FILES
@@ -13,6 +14,7 @@ target_sources(aknet_startup
         include/clock.h
         include/startup_step.h
         include/startup_engine.h
+        include/startup_manager.h
 )
 
 
