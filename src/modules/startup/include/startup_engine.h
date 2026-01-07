@@ -75,7 +75,7 @@ namespace aknet::startup {
         Result rebuild_progress_snapshot(AppState state);
 
         // Execute one step and update progress_.
-        void run_step(std::size_t index);
+        bool run_step(std::size_t index);
 
         // Terminal handling
         void transition_to_off_with_error(std::string error, bool can_retry);

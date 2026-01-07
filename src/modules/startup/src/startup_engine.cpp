@@ -175,9 +175,9 @@ namespace aknet::startup {
                 return progress_;
             }
 
-            run_step(i);
+            bool continue_sequence = run_step(i);
 
-            if (state() == AppState::Off) {
+            if (!continue_sequence) {
                 return progress_;
             }
 
@@ -227,20 +227,7 @@ namespace aknet::startup {
 
         for (auto & step : steps_) {
 
-            auto config = step->config();
-
-            auto val_res = validate_step_config(config);
-
-            if (!val_res.ok) {
-                return {.ok = false, .error = val_res.error};
-            }
-
-            configs.push_back(config);
-        }
-
-        auto val_res2 = validate_step_configs_unique(configs);
-        if (!val_res2.ok) {
-            return {.ok = false, .error = val_res2.error};
+            configs.push_back(step->config());
         }
 
         progress_ = make_initial_sequence_progress(state, configs);
@@ -254,7 +241,7 @@ namespace aknet::startup {
 
     // Run step
 
-    void StartupEngine::run_step(std::size_t index) {
+    bool StartupEngine::run_step(std::size_t index) {
 
         progress_.current_step_index = static_cast<int>(index);
 
@@ -280,11 +267,6 @@ namespace aknet::startup {
         ctx.logger = logger_;
         ctx.settings = settings_.get();
 
-        if (ctx.abort_requested()) {
-            step_progress.status = StepStatus::Aborted;
-            transition_to_off_with_error("Step " + step_config.id + " aborted", false);
-            return;
-        }
 
         StepResult result = steps_[index]->run(ctx);
 
@@ -296,8 +278,14 @@ namespace aknet::startup {
 
         if (ctx.abort_requested()) {
             step_progress.status = StepStatus::Aborted;
+
+            // Mark all remaining steps as aborted
+            for (std::size_t j = index + 1; j < progress_.steps.size(); ++j) {
+                progress_.steps[j].status = StepStatus::Aborted;
+            }
+
             transition_to_off_with_error("Step " + step_config.id + " aborted", false);
-            return;
+            return false; // Stop sequence run
         }
 
         step_progress.status = result.status;
@@ -307,23 +295,25 @@ namespace aknet::startup {
         if (result.status == StepStatus::Failed && step_config.critical) {
 
             transition_to_off_with_error("Step " + step_config.id + " failed and was critical", true);
-            return;
+            return false; // Stop sequence run
 
         }
 
         if (result.status == StepStatus::TimedOut && step_config.critical) {
 
             transition_to_off_with_error("Step " + step_config.id + " timed out and was critical", true);
-            return;
+            return false; // Stop sequence run
 
         }
 
         if (result.status == StepStatus::Aborted && step_config.critical) {
 
             transition_to_off_with_error("Step " + step_config.id + " was aborted and was critical", true);
-            return;
+            return false; // Stop sequence run
 
         }
+
+        return true;
 
     }
 

@@ -56,7 +56,7 @@ struct FakeClock : startup::IClock {
     }
 };
 
-// A step that basically does nothing
+// A step that basically does nothing and returns a pre-defined result
 class FakeStep : public startup::IStartupStep {
     startup::StepConfig config_;
     startup::StepResult result_;
@@ -230,6 +230,75 @@ TEST_CASE("Startup | Data validation", "[startup]") {
 
     }
 
+}
+
+TEST_CASE("Startup | Data validation edge cases", "[startup]") {
+
+    SECTION("validate_step_configs_unique passes with empty vector") {
+        std::vector<startup::StepConfig> empty_configs;
+        auto result = startup::validate_step_configs_unique(empty_configs);
+        REQUIRE(result.ok);
+    }
+
+    SECTION("validate_step_configs_unique passes with single config") {
+        std::vector<startup::StepConfig> single_config;
+        single_config.push_back(startup::StepConfig{
+            .id = "single",
+            .display_name = "Single",
+            .timeout = std::chrono::seconds{5}
+        });
+        auto result = startup::validate_step_configs_unique(single_config);
+        REQUIRE(result.ok);
+    }
+
+    SECTION("step config with zero timeout passes validation") {
+        startup::StepConfig step_config{
+            .id = "test_id",
+            .display_name = "Test Display Name",
+            .timeout = std::chrono::seconds{0}
+        };
+
+        auto validation_result = startup::validate_step_config(step_config);
+        REQUIRE(validation_result.ok);
+    }
+}
+
+TEST_CASE("Startup | Helper functions", "[startup]") {
+
+    SECTION("make_initial_step_progress copies config fields correctly") {
+        startup::StepConfig config{
+            .id = "test_step",
+            .display_name = "Test Step Name",
+            .timeout = std::chrono::seconds{42}
+        };
+
+        auto progress = startup::make_initial_step_progress(config);
+
+        REQUIRE(progress.id == "test_step");
+        REQUIRE(progress.display_name == "Test Step Name");
+        REQUIRE(progress.status == startup::StepStatus::Pending);
+        REQUIRE(progress.message.empty());
+        REQUIRE_FALSE(progress.start_time.has_value());
+        REQUIRE_FALSE(progress.end_time.has_value());
+    }
+
+    SECTION("make_initial_sequence_progress sets state correctly") {
+        std::vector<startup::StepConfig> configs;
+        configs.push_back(startup::StepConfig{.id = "s1", .display_name = "S1", .timeout = std::chrono::seconds{5}});
+
+        auto progress = startup::make_initial_sequence_progress(startup::AppState::Booting, configs);
+
+        REQUIRE(progress.state == startup::AppState::Booting);
+        REQUIRE(progress.steps.size() == 1);
+    }
+
+    SECTION("make_initial_sequence_progress with empty configs") {
+        std::vector<startup::StepConfig> empty;
+        auto progress = startup::make_initial_sequence_progress(startup::AppState::Off, empty);
+
+        REQUIRE(progress.state == startup::AppState::Off);
+        REQUIRE(progress.steps.empty());
+    }
 }
 
 TEST_CASE("Startup | Default helpers", "[startup]") {
@@ -586,3 +655,372 @@ TEST_CASE("Startup | Timeout detection", "[startup]") {
     }
 
 }
+
+TEST_CASE("Startup | Critical status for TimedOut and Aborted", "[startup]") {
+
+    SECTION("non-critical timeout continues sequence") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<SlowStep>(
+            startup::StepConfig{
+                .id = "slow",
+                .display_name = "Slow",
+                .timeout = std::chrono::seconds{5},
+                .critical = false  // Non-critical
+            },
+            f.clock,
+            std::chrono::seconds{10}
+        ));
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step2", .display_name = "Step 2", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        engine.set_steps(std::move(steps));
+        const auto& progress = engine.run({});
+
+        REQUIRE(progress.state == startup::AppState::Active);
+        REQUIRE(progress.steps[0].status == startup::StepStatus::TimedOut);
+        REQUIRE(progress.steps[1].status == startup::StepStatus::Success);
+    }
+
+    SECTION("non-critical abort continues sequence") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        class AbortReturningStep : public startup::IStartupStep {
+            startup::StepConfig config_;
+        public:
+            explicit AbortReturningStep(startup::StepConfig cfg) : config_(std::move(cfg)) {}
+            const startup::StepConfig& config() const override { return config_; }
+            startup::StepResult run(startup::StepContext&) override {
+                return {startup::StepStatus::Aborted, "Aborted"};
+            }
+        };
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<AbortReturningStep>(
+            startup::StepConfig{.id = "abort_step", .display_name = "Abort", .timeout = std::chrono::seconds{5}, .critical = false}
+        ));
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step2", .display_name = "Step 2", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        engine.set_steps(std::move(steps));
+        const auto& progress = engine.run({});
+
+        REQUIRE(progress.state == startup::AppState::Active);
+        REQUIRE(progress.steps[0].status == startup::StepStatus::Aborted);
+        REQUIRE(progress.steps[1].status == startup::StepStatus::Success);
+    }
+}
+
+TEST_CASE("Startup | Step management operations", "[startup]") {
+
+    SECTION("add_step successfully appends to existing steps") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        // Set initial steps
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "Step 1 OK"}
+        ));
+        engine.set_steps(std::move(steps));
+        REQUIRE(engine.step_count() == 1);
+
+        // Add a second step
+        auto result = engine.add_step(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step2", .display_name = "Step 2", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "Step 2 OK"}
+        ));
+
+        REQUIRE(result.ok);
+        REQUIRE(engine.step_count() == 2);
+        REQUIRE(engine.progress().steps.size() == 2);
+    }
+
+    SECTION("add_step rejects null step") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        auto result = engine.add_step(nullptr);
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.find("Invalid step") != std::string::npos);
+    }
+
+    SECTION("add_step rejects duplicate ID") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "Step 1 OK"}
+        ));
+        engine.set_steps(std::move(steps));
+
+        auto result = engine.add_step(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Duplicate", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "Step 1 OK"}
+        ));
+
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.find("Duplicate") != std::string::npos);
+    }
+
+    SECTION("add_step rejects invalid config") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        auto result = engine.add_step(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "", .display_name = "No ID", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        REQUIRE_FALSE(result.ok);
+    }
+
+    SECTION("clear_steps resets engine state") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+        engine.set_steps(std::move(steps));
+        REQUIRE(engine.has_steps());
+
+        engine.clear_steps();
+
+        REQUIRE_FALSE(engine.has_steps());
+        REQUIRE(engine.step_count() == 0);
+        REQUIRE(engine.state() == startup::AppState::Off);
+        REQUIRE(engine.progress().current_step_index == -1);
+        REQUIRE_FALSE(engine.progress().last_error.has_value());
+        REQUIRE(engine.progress().can_retry == false);
+    }
+
+    SECTION("set_steps rejects null step in vector") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+        steps.push_back(nullptr);  // Null step
+
+        auto result = engine.set_steps(std::move(steps));
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.find("Invalid step") != std::string::npos);
+    }
+
+    SECTION("set_steps rejects steps with invalid configs") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "", .display_name = "No ID", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        auto result = engine.set_steps(std::move(steps));
+        REQUIRE_FALSE(result.ok);
+    }
+}
+
+TEST_CASE("Startup | Abort and cancellation", "[startup]") {
+
+    SECTION("abort before run prevents execution") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+        engine.set_steps(std::move(steps));
+
+        engine.request_abort();
+
+        const auto& progress = engine.run({});
+
+        REQUIRE(progress.state == startup::AppState::Off);
+        REQUIRE(progress.last_error.has_value());
+        REQUIRE(progress.last_error.value().find("aborted") != std::string::npos);
+        REQUIRE(progress.steps[0].status == startup::StepStatus::Pending);  // Never ran
+    }
+
+    SECTION("abort during execution marks remaining steps as Aborted") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        // Create a step that triggers abort mid-execution
+        class AbortingStep : public startup::IStartupStep {
+            startup::StepConfig config_;
+            startup::StartupEngine* engine_;
+        public:
+            AbortingStep(startup::StepConfig cfg, startup::StartupEngine* eng)
+                : config_(std::move(cfg)), engine_(eng) {}
+
+            const startup::StepConfig& config() const override { return config_; }
+
+            startup::StepResult run(startup::StepContext& ctx) override {
+                engine_->request_abort();  // Trigger abort during step
+                return {startup::StepStatus::Success, "Aborted internally"};
+            }
+        };
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+        steps.push_back(std::make_unique<AbortingStep>(
+            startup::StepConfig{.id = "step2", .display_name = "Aborting Step", .timeout = std::chrono::seconds{5}},
+            &engine
+        ));
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step3", .display_name = "Step 3", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        engine.set_steps(std::move(steps));
+        const auto& progress = engine.run({});
+
+        REQUIRE(progress.state == startup::AppState::Off);
+        REQUIRE(progress.steps[0].status == startup::StepStatus::Success);
+        REQUIRE(progress.steps[1].status == startup::StepStatus::Aborted);
+        REQUIRE(progress.steps[2].status == startup::StepStatus::Aborted);  // Marked as aborted
+    }
+
+    SECTION("reset_abort clears abort flag") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        engine.request_abort();
+        engine.reset_abort();
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+        engine.set_steps(std::move(steps));
+
+        const auto& progress = engine.run({});
+
+        REQUIRE(progress.state == startup::AppState::Active);  // Should succeed
+    }
+
+    SECTION("abort before step execution aborts that step") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        // Step that checks abort before running
+        class AbortCheckingStep : public startup::IStartupStep {
+            startup::StepConfig config_;
+        public:
+            explicit AbortCheckingStep(startup::StepConfig cfg) : config_(std::move(cfg)) {}
+            const startup::StepConfig& config() const override { return config_; }
+
+            startup::StepResult run(startup::StepContext& ctx) override {
+                if (ctx.abort_requested()) {
+                    return {startup::StepStatus::Aborted, "Detected abort"};
+                }
+                return {startup::StepStatus::Success, "OK"};
+            }
+        };
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<AbortCheckingStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}, .critical = true}
+        ));
+
+        engine.set_steps(std::move(steps));
+        engine.request_abort();
+
+        const auto& progress = engine.run({});
+
+        REQUIRE(progress.state == startup::AppState::Off);
+        REQUIRE(progress.last_error.has_value());
+    }
+
+    SECTION("critical step returning Aborted status stops sequence") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{
+                .id = "abort_step",
+                .display_name = "Aborts itself",
+                .timeout = std::chrono::seconds{5},
+                .critical = true
+            },
+            startup::StepResult{startup::StepStatus::Aborted, "Step aborted itself"}  // Returns Aborted
+        ));
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step2", .display_name = "Step 2", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        engine.set_steps(std::move(steps));
+        const auto& progress = engine.run({});
+
+        REQUIRE(progress.state == startup::AppState::Off);
+        REQUIRE(progress.steps[0].status == startup::StepStatus::Aborted);
+        REQUIRE(progress.can_retry == true);
+        REQUIRE(progress.last_error.has_value());
+        REQUIRE(progress.last_error.value().find("aborted") != std::string::npos);
+    }
+}
+
+TEST_CASE("Startup | Run options and re-execution", "[startup]") {
+
+    SECTION("run with reset_progress_before_run=false preserves old progress") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+        engine.set_steps(std::move(steps));
+
+        // First run
+        engine.run({.reset_progress_before_run = true});
+
+        // Second run without reset
+        const auto& progress = engine.run({.reset_progress_before_run = false});
+
+        // State should update but timestamps might not be reset (implementation-dependent)
+        REQUIRE(progress.state == startup::AppState::Active);
+    }
+
+    SECTION("running with no steps set returns error") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        const auto& progress = engine.run({});
+
+        REQUIRE(progress.state == startup::AppState::Off);
+        REQUIRE(progress.last_error.has_value());
+        REQUIRE(progress.last_error.value().find("No steps") != std::string::npos);
+        REQUIRE(progress.can_retry == false);
+    }
+}
+
+
+
