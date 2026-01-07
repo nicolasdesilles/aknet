@@ -150,6 +150,9 @@ namespace aknet::startup {
             return progress_;
         }
 
+        // Preserve abort reason if already set (e.g., from request_abort() before run())
+        auto preserved_abort_reason = progress_.abort_reason;
+
         if (options.reset_progress_before_run) {
             rebuild_progress_snapshot(AppState::Booting);
         }
@@ -159,8 +162,17 @@ namespace aknet::startup {
 
         progress_.last_error.reset();
         progress_.can_retry = false;
+        
+        // Restore abort reason if it was set before run()
+        if (preserved_abort_reason != AbortReason::None) {
+            progress_.abort_reason = preserved_abort_reason;
+        }
 
         if (abort_requested_) {
+            // Ensure abort reason is set if not already
+            if (progress_.abort_reason == AbortReason::None) {
+                progress_.abort_reason = AbortReason::UserRequested;
+            }
             transition_to_off_with_error("Startup aborted", false);
             return progress_;
         }
@@ -168,6 +180,12 @@ namespace aknet::startup {
         for (std::size_t i = 0; i < steps_.size(); ++i) {
 
             if (abort_requested_) {
+
+                // If abort reason is None, set it to UserRequested as default
+                if (progress_.abort_reason == AbortReason::None) {
+                    progress_.abort_reason = AbortReason::UserRequested;
+                }
+
                 // Mark all steps as aborted
                 for (std::size_t j = i; j < progress_.steps.size(); ++j) {
                     progress_.steps[j].status = StepStatus::Aborted;
@@ -221,12 +239,14 @@ namespace aknet::startup {
 
     // Cancellation
 
-    void StartupEngine::request_abort() {
-        abort_requested_ = true;
+    void StartupEngine::request_abort(AbortReason reason) {
+        abort_requested_.store(true, std::memory_order_relaxed);
+        progress_.abort_reason = reason;
     }
 
     void StartupEngine::reset_abort() {
-        abort_requested_ = false;
+        abort_requested_.store(false, std::memory_order_relaxed);
+        progress_.abort_reason = AbortReason::None;
     }
 
     // Accessors
@@ -310,6 +330,11 @@ namespace aknet::startup {
 
         if (ctx.abort_requested()) {
             step_progress.status = StepStatus::Aborted;
+
+            // If abort reason is None, set it to UserRequested as default
+            if (progress_.abort_reason == AbortReason::None) {
+                progress_.abort_reason = AbortReason::UserRequested;
+            }
 
             // Mark all remaining steps as aborted
             for (std::size_t j = index + 1; j < progress_.steps.size(); ++j) {

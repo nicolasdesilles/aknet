@@ -43,6 +43,12 @@ namespace aknet::startup {
         bool is_expired() const {
             return clock && (clock->now() >= deadline);
         }
+
+        void check_abort_point() const {
+            if (abort_requested()) {
+                throw std::runtime_error("Step aborted");
+            }
+        }
     };
 
     class IStartupStep {

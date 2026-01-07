@@ -64,7 +64,7 @@ namespace aknet::startup {
         Result retry();
 
         // cancellation: runner checks between steps; steps can check via StepContext.
-        void request_abort();
+        void request_abort(AbortReason reason = AbortReason::UserRequested);
         void reset_abort();
 
         // Accessors

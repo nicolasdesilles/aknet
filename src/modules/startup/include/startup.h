@@ -22,6 +22,14 @@ namespace aknet::startup {
 
     enum class StepStatus { Pending, Running, Success, Failed, TimedOut, Skipped, Aborted };
 
+    enum class AbortReason {
+        None,              ///< No abort requested
+        UserRequested,     ///< User clicked "Cancel" button
+        Timeout,           ///< Step exceeded its timeout (future use)
+        CriticalFailure,   ///< Critical step failed (future use)
+        SystemShutdown     ///< Application is shutting down
+    };
+
     struct StepConfig {
         std::string id;
         std::string display_name;
@@ -45,6 +53,7 @@ namespace aknet::startup {
         std::vector<StepProgress> steps;
         std::optional<std::string> last_error;
         bool can_retry = false;
+        AbortReason abort_reason = AbortReason::None;
     };
 
     struct Result {

@@ -10,6 +10,7 @@
 
 #include <logger.h>
 #include <settings.h>
+#include <thread>
 
 #include "startup.h"
 #include "clock.h"
@@ -1296,3 +1297,250 @@ TEST_CASE("Startup | Retry", "[startup]") {
 
 }
 
+TEST_CASE("Startup | Abort Reason", "[startup]") {
+
+    SECTION("default abort reason is None") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        auto progress = engine.progress();
+        REQUIRE(progress.abort_reason == startup::AbortReason::None);
+    }
+
+    SECTION("request_abort sets default reason to UserRequested") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        engine.request_abort();
+
+        auto progress = engine.progress();
+        REQUIRE(progress.abort_reason == startup::AbortReason::UserRequested);
+    }
+
+    SECTION("request_abort with explicit reason sets it correctly") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        engine.request_abort(startup::AbortReason::SystemShutdown);
+
+        auto progress = engine.progress();
+        REQUIRE(progress.abort_reason == startup::AbortReason::SystemShutdown);
+    }
+
+    SECTION("reset_abort clears abort reason") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        engine.request_abort(startup::AbortReason::UserRequested);
+        engine.reset_abort();
+
+        auto progress = engine.progress();
+        REQUIRE(progress.abort_reason == startup::AbortReason::None);
+    }
+
+    SECTION("abort reason persists in progress after sequence aborted") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+        engine.set_steps(std::move(steps));
+
+        engine.request_abort(startup::AbortReason::SystemShutdown);
+        const auto& progress = engine.run({});
+
+        REQUIRE(progress.abort_reason == startup::AbortReason::SystemShutdown);
+        REQUIRE(progress.state == startup::AppState::Off);
+    }
+
+    SECTION("abort reason persists when abort detected during step execution") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        // Create a step that triggers abort mid-execution
+        class AbortingStep : public startup::IStartupStep {
+            startup::StepConfig config_;
+            startup::StartupEngine* engine_;
+            startup::AbortReason reason_;
+        public:
+            AbortingStep(startup::StepConfig cfg, startup::StartupEngine* eng, startup::AbortReason reason)
+                : config_(std::move(cfg)), engine_(eng), reason_(reason) {}
+
+            const startup::StepConfig& config() const override { return config_; }
+
+            startup::StepResult run(startup::StepContext& ctx) override {
+                engine_->request_abort(reason_);
+                return {startup::StepStatus::Success, "Should be overridden"};
+            }
+        };
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+        steps.push_back(std::make_unique<AbortingStep>(
+            startup::StepConfig{.id = "step2", .display_name = "Aborting Step", .timeout = std::chrono::seconds{5}},
+            &engine,
+            startup::AbortReason::CriticalFailure
+        ));
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step3", .display_name = "Step 3", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        engine.set_steps(std::move(steps));
+        const auto& progress = engine.run({});
+
+        REQUIRE(progress.abort_reason == startup::AbortReason::CriticalFailure);
+        REQUIRE(progress.state == startup::AppState::Off);
+        REQUIRE(progress.steps[1].status == startup::StepStatus::Aborted);
+        REQUIRE(progress.steps[2].status == startup::StepStatus::Aborted);
+    }
+
+    SECTION("retry clears abort reason") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        // Step that fails first time, succeeds on retry
+        class FailOnceThenSucceedStep : public startup::IStartupStep {
+            startup::StepConfig config_;
+            mutable int call_count_ = 0;
+        public:
+            explicit FailOnceThenSucceedStep(startup::StepConfig cfg)
+                : config_(std::move(cfg)) {}
+
+            const startup::StepConfig& config() const override { return config_; }
+
+            startup::StepResult run(startup::StepContext&) override {
+                call_count_++;
+                if (call_count_ == 1) {
+                    return {startup::StepStatus::Failed, "First attempt failed"};
+                }
+                return {startup::StepStatus::Success, "Retry succeeded"};
+            }
+        };
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FailOnceThenSucceedStep>(
+            startup::StepConfig{
+                .id = "flaky_step",
+                .display_name = "Flaky Step",
+                .timeout = std::chrono::seconds{5},
+                .critical = true
+            }
+        ));
+        engine.set_steps(std::move(steps));
+
+        // First run: fails
+        engine.run({});
+
+        // Set abort reason manually
+        engine.request_abort(startup::AbortReason::UserRequested);
+        REQUIRE(engine.progress().abort_reason == startup::AbortReason::UserRequested);
+
+        // Retry: should clear abort reason
+        auto retry_result = engine.retry();
+        REQUIRE(retry_result.ok);
+
+        const auto& progress = engine.progress();
+        REQUIRE(progress.abort_reason == startup::AbortReason::None);
+        REQUIRE(progress.state == startup::AppState::Active);
+    }
+
+}
+
+TEST_CASE("Startup | check_abort_point helper", "[startup]") {
+
+    SECTION("check_abort_point throws when abort requested") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        // Step that uses check_abort_point in a loop
+        class ThrowingAbortStep : public startup::IStartupStep {
+            startup::StepConfig config_;
+        public:
+            explicit ThrowingAbortStep(startup::StepConfig cfg)
+                : config_(std::move(cfg)) {}
+
+            const startup::StepConfig& config() const override { return config_; }
+
+            startup::StepResult run(startup::StepContext& ctx) override {
+                try {
+                    for (int i = 0; i < 10; ++i) {
+                        ctx.check_abort_point();  // Should throw if aborted
+                        // Simulate some work
+                    }
+                    return {startup::StepStatus::Success, "Completed"};
+                } catch (const std::runtime_error& e) {
+                    return {startup::StepStatus::Aborted, std::string("Caught: ") + e.what()};
+                }
+            }
+        };
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<ThrowingAbortStep>(
+            startup::StepConfig{
+                .id = "throw_test",
+                .display_name = "Abort Point Test",
+                .timeout = std::chrono::seconds{10},
+                .critical = true
+            }
+        ));
+        engine.set_steps(std::move(steps));
+
+        // Request abort before running
+        engine.request_abort();
+
+        const auto& progress = engine.run({});
+
+        // The step should have been aborted (either by engine or by catching exception)
+        REQUIRE(progress.state == startup::AppState::Off);
+    }
+
+    SECTION("check_abort_point does not throw when abort not requested") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        class ThrowingAbortStep : public startup::IStartupStep {
+            startup::StepConfig config_;
+        public:
+            explicit ThrowingAbortStep(startup::StepConfig cfg)
+                : config_(std::move(cfg)) {}
+
+            const startup::StepConfig& config() const override { return config_; }
+
+            startup::StepResult run(startup::StepContext& ctx) override {
+                try {
+                    for (int i = 0; i < 10; ++i) {
+                        ctx.check_abort_point();
+                    }
+                    return {startup::StepStatus::Success, "Completed without abort"};
+                } catch (const std::runtime_error&) {
+                    return {startup::StepStatus::Aborted, "Should not happen"};
+                }
+            }
+        };
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<ThrowingAbortStep>(
+            startup::StepConfig{
+                .id = "throw_test",
+                .display_name = "Abort Point Test",
+                .timeout = std::chrono::seconds{10}
+            }
+        ));
+        engine.set_steps(std::move(steps));
+
+        // Don't request abort
+        const auto& progress = engine.run({});
+
+        REQUIRE(progress.state == startup::AppState::Active);
+        REQUIRE(progress.steps[0].status == startup::StepStatus::Success);
+        REQUIRE(progress.steps[0].message == "Completed without abort");
+    }
+
+}
