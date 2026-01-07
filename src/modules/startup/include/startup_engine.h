@@ -11,6 +11,7 @@
 #include <atomic>
 #include <memory>
 #include <vector>
+#include <stdexcept>
 
 #include <logger.h>
 #include "startup.h"
@@ -60,6 +61,8 @@ namespace aknet::startup {
         // Synchronous run: executes steps in order and returns the final progress snapshot.
         const SequenceProgress& run(const RunOptions& options);
 
+        Result retry();
+
         // cancellation: runner checks between steps; steps can check via StepContext.
         void request_abort();
         void reset_abort();
@@ -69,10 +72,11 @@ namespace aknet::startup {
         AppState state() const;
         bool has_steps() const;
         std::size_t step_count() const;
+        bool can_retry() const;
 
     private:
         // Build progress_.steps from current steps_ configs.
-        Result rebuild_progress_snapshot(AppState state);
+        void rebuild_progress_snapshot(AppState state);
 
         // Execute one step and update progress_.
         bool run_step(std::size_t index);

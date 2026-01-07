@@ -1022,5 +1022,277 @@ TEST_CASE("Startup | Run options and re-execution", "[startup]") {
     }
 }
 
+TEST_CASE("Startup | Retry", "[startup]") {
 
+    SECTION("retry fails when sequence never ran") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+        engine.set_steps(std::move(steps));
+
+        // Don't run, try to retry
+        auto result = engine.retry();
+
+        REQUIRE_FALSE(result.ok);
+    }
+
+    SECTION("retry fails when last run succeeded") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+        engine.set_steps(std::move(steps));
+
+        engine.run({});
+        REQUIRE(engine.state() == startup::AppState::Active);
+
+        auto result = engine.retry();
+
+        REQUIRE_FALSE(result.ok);
+    }
+
+    SECTION("retry fails when last run was aborted by user") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+        engine.set_steps(std::move(steps));
+
+        engine.request_abort();
+        engine.run({});
+
+        REQUIRE(engine.state() == startup::AppState::Off);
+        REQUIRE_FALSE(engine.progress().can_retry);  // Abort sets can_retry=false
+
+        auto result = engine.retry();
+
+        REQUIRE_FALSE(result.ok);
+    }
+
+    SECTION("retry succeeds after critical failure when step now passes") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        // Step that fails first time, succeeds on retry
+        class FailOnceThenSucceedStep : public startup::IStartupStep {
+            startup::StepConfig config_;
+            mutable int call_count_ = 0;
+        public:
+            explicit FailOnceThenSucceedStep(startup::StepConfig cfg)
+                : config_(std::move(cfg)) {}
+
+            const startup::StepConfig& config() const override { return config_; }
+
+            startup::StepResult run(startup::StepContext&) override {
+                call_count_++;
+                if (call_count_ == 1) {
+                    return {startup::StepStatus::Failed, "First attempt failed"};
+                }
+                return {startup::StepStatus::Success, "Retry succeeded"};
+            }
+        };
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FailOnceThenSucceedStep>(
+            startup::StepConfig{
+                .id = "flaky_step",
+                .display_name = "Flaky Step",
+                .timeout = std::chrono::seconds{5},
+                .critical = true
+            }
+        ));
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step2", .display_name = "Step 2", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        engine.set_steps(std::move(steps));
+
+        // First run: fails
+        const auto& progress1 = engine.run({});
+        REQUIRE(progress1.state == startup::AppState::Off);
+        REQUIRE(progress1.can_retry == true);
+        REQUIRE(progress1.steps[0].status == startup::StepStatus::Failed);
+
+        // Retry: should succeed
+        auto retry_result = engine.retry();
+        REQUIRE(retry_result.ok);
+
+        const auto& progress2 = engine.progress();
+        REQUIRE(progress2.state == startup::AppState::Active);
+        REQUIRE(progress2.can_retry == false);
+        REQUIRE(progress2.steps[0].status == startup::StepStatus::Success);
+        REQUIRE(progress2.steps[1].status == startup::StepStatus::Success);
+        REQUIRE_FALSE(progress2.last_error.has_value());
+    }
+
+    SECTION("retry can be called multiple times if failures persist") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        // Step that fails first 2 times, succeeds on 3rd
+        class FailTwiceStep : public startup::IStartupStep {
+            startup::StepConfig config_;
+            mutable int call_count_ = 0;
+        public:
+            explicit FailTwiceStep(startup::StepConfig cfg) : config_(std::move(cfg)) {}
+            const startup::StepConfig& config() const override { return config_; }
+
+            startup::StepResult run(startup::StepContext&) override {
+                call_count_++;
+                if (call_count_ <= 2) {
+                    return {startup::StepStatus::Failed, "Attempt " + std::to_string(call_count_) + " failed"};
+                }
+                return {startup::StepStatus::Success, "Finally succeeded"};
+            }
+        };
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FailTwiceStep>(
+            startup::StepConfig{.id = "flaky", .display_name = "Flaky", .timeout = std::chrono::seconds{5}, .critical = true}
+        ));
+        engine.set_steps(std::move(steps));
+
+        // Run 1: fail
+        engine.run({});
+        REQUIRE(engine.state() == startup::AppState::Off);
+        REQUIRE(engine.can_retry() == true);
+
+        // Retry 1: fail again
+        engine.retry();
+        REQUIRE(engine.state() == startup::AppState::Off);
+        REQUIRE(engine.can_retry() == true);
+
+        // Retry 2: succeed
+        engine.retry();
+        REQUIRE(engine.state() == startup::AppState::Active);
+        REQUIRE(engine.can_retry() == false);
+    }
+
+    SECTION("retry after critical failure clears any stale abort flag") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        // Use a step that fails first time, succeeds on retry
+        class FailOnceThenSucceedStep : public startup::IStartupStep {
+            startup::StepConfig config_;
+            mutable int call_count_ = 0;
+        public:
+            explicit FailOnceThenSucceedStep(startup::StepConfig cfg)
+                : config_(std::move(cfg)) {}
+
+            const startup::StepConfig& config() const override { return config_; }
+
+            startup::StepResult run(startup::StepContext&) override {
+                call_count_++;
+                if (call_count_ == 1) {
+                    return {startup::StepStatus::Failed, "First attempt failed"};
+                }
+                return {startup::StepStatus::Success, "Retry succeeded"};
+            }
+        };
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<FailOnceThenSucceedStep>(
+            startup::StepConfig{
+                .id = "step1",
+                .display_name = "Step 1",
+                .timeout = std::chrono::seconds{5},
+                .critical = true
+            }
+        ));
+        engine.set_steps(std::move(steps));
+
+        // Run and fail
+        engine.run({});
+        REQUIRE(engine.can_retry());
+
+        // Set abort flag (simulating user changing mind before retry)
+        engine.request_abort();
+
+        // Retry should clear abort flag and run successfully
+        auto result = engine.retry();
+        REQUIRE(result.ok);
+        REQUIRE(engine.state() == startup::AppState::Active);
+    }
+
+    SECTION("retry resets all steps to Pending before re-running") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        // Step 2 fails first time, succeeds on retry
+        class Step1 : public startup::IStartupStep {
+            startup::StepConfig config_;
+        public:
+            Step1() : config_{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}} {}
+            const startup::StepConfig& config() const override { return config_; }
+            startup::StepResult run(startup::StepContext&) override {
+                return {startup::StepStatus::Success, "OK"};
+            }
+        };
+
+        class Step2 : public startup::IStartupStep {
+            startup::StepConfig config_;
+            mutable int call_count_ = 0;
+        public:
+            Step2() : config_{
+                .id = "step2",
+                .display_name = "Step 2",
+                .timeout = std::chrono::seconds{5},
+                .critical = true
+            } {}
+            const startup::StepConfig& config() const override { return config_; }
+            startup::StepResult run(startup::StepContext&) override {
+                call_count_++;
+                if (call_count_ == 1) {
+                    return {startup::StepStatus::Failed, "Fail"};
+                }
+                return {startup::StepStatus::Success, "Now OK"};
+            }
+        };
+
+        class Step3 : public startup::IStartupStep {
+            startup::StepConfig config_;
+        public:
+            Step3() : config_{.id = "step3", .display_name = "Step 3", .timeout = std::chrono::seconds{5}} {}
+            const startup::StepConfig& config() const override { return config_; }
+            startup::StepResult run(startup::StepContext&) override {
+                return {startup::StepStatus::Success, "OK"};
+            }
+        };
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<Step1>());
+        steps.push_back(std::make_unique<Step2>());
+        steps.push_back(std::make_unique<Step3>());
+        engine.set_steps(std::move(steps));
+
+        // First run - step2 fails
+        engine.run({});
+        REQUIRE(engine.progress().steps[0].status == startup::StepStatus::Success);
+        REQUIRE(engine.progress().steps[1].status == startup::StepStatus::Failed);
+        REQUIRE(engine.progress().steps[2].status == startup::StepStatus::Pending);  // Never ran
+
+        // Retry - step2 now succeeds, all steps should run
+        engine.retry();
+
+        REQUIRE(engine.progress().steps[0].status == startup::StepStatus::Success);
+        REQUIRE(engine.progress().steps[1].status == startup::StepStatus::Success);
+        REQUIRE(engine.progress().steps[2].status == startup::StepStatus::Success);
+    }
+
+}
 

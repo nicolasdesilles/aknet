@@ -138,6 +138,8 @@ namespace aknet::startup {
 
     const SequenceProgress & StartupEngine::run(const RunOptions &options) {
 
+        logger_->info("Running startup sequence...");
+
         if (steps_.empty()) {
             logger_->error("No steps provided to StartupEngine::run");
 
@@ -183,11 +185,38 @@ namespace aknet::startup {
 
         }
 
+        logger_->info("Startup sequence completed successfully.");
+
         progress_.state = AppState::Active;
         progress_.current_step_index = -1;
 
         return progress_;
 
+    }
+
+    Result StartupEngine::retry() {
+
+        // we can only retry if the last run failed and can_retry is true
+        if (progress_.state != AppState::Off) {
+            logger_->warn("Cannot retry sequence run, sequence is not in Off state");
+            return {.ok = false, .error = "Cannot retry sequence run, sequence is not in Off state"};
+        }
+
+        if (!progress_.can_retry) {
+            logger_->warn("Cannot retry sequence run, sequence cannot be retried");
+            return {.ok = false, .error = "Cannot retry sequence run, sequence cannot be retried"};
+        }
+
+        logger_->info("Retrying startup sequence...");
+
+        reset_abort();
+
+        rebuild_progress_snapshot(AppState::Booting);
+
+        // run the sequence again
+        run({.reset_progress_before_run = false});
+
+        return {.ok = true};
     }
 
     // Cancellation
@@ -218,15 +247,18 @@ namespace aknet::startup {
         return steps_.size();
     }
 
+    bool StartupEngine::can_retry() const {
+        return progress_.state == AppState::Off && progress_.can_retry;
+    }
+
     // Rebuild progress snapshot
 
-    Result StartupEngine::rebuild_progress_snapshot(AppState state) {
+    void StartupEngine::rebuild_progress_snapshot(AppState state) {
 
         std::vector<StepConfig> configs;
         configs.reserve(steps_.size());
 
         for (auto & step : steps_) {
-
             configs.push_back(step->config());
         }
 
@@ -235,8 +267,6 @@ namespace aknet::startup {
         progress_.last_error.reset();
         progress_.can_retry = false;
 
-        return {.ok = true};
-
     }
 
     // Run step
@@ -244,6 +274,8 @@ namespace aknet::startup {
     bool StartupEngine::run_step(std::size_t index) {
 
         progress_.current_step_index = static_cast<int>(index);
+
+        logger_->info("Running step {}...", steps_[index]->config().id);
 
         auto &step_progress = progress_.steps[index];
         step_progress.status = StepStatus::Running;
