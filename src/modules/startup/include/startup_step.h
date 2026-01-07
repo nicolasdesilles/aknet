@@ -34,7 +34,7 @@ namespace aknet::startup {
         std::chrono::steady_clock::time_point deadline{};
 
         std::shared_ptr<log::Logger> logger;
-        std::shared_ptr<settings::Settings>* settings{nullptr};
+        settings::Settings* settings{nullptr};
 
         bool abort_requested() const {
             return abort_flag && abort_flag->load(std::memory_order_relaxed);

@@ -12,7 +12,7 @@
 #include <memory>
 #include <vector>
 
-#include "logger.h"
+#include <logger.h>
 #include "startup.h"
 #include "startup_step.h"
 #include "clock.h"
@@ -72,13 +72,13 @@ namespace aknet::startup {
 
     private:
         // Build progress_.steps from current steps_ configs.
-        Result rebuild_progress_snapshot_(AppState state);
+        Result rebuild_progress_snapshot(AppState state);
 
         // Execute one step and update progress_.
-        void run_step_(std::size_t index);
+        void run_step(std::size_t index);
 
         // Terminal handling
-        void transition_to_off_with_error_(std::string error, bool can_retry);
+        void transition_to_off_with_error(std::string error, bool can_retry);
 
         // Dependencies owned by core; stored here for step execution.
         std::shared_ptr<log::Logger> logger_;

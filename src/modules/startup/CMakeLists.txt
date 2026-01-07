@@ -28,4 +28,4 @@ target_include_directories(aknet_startup
 target_compile_features(aknet_startup PRIVATE cxx_std_23)
 
 # External dependencies
-target_link_libraries(aknet_startup PUBLIC aknet_logger)
+target_link_libraries(aknet_startup PUBLIC aknet_logger aknet_settings)
