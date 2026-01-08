@@ -18,6 +18,7 @@
 #include "startup_step.h"
 #include "startup_engine.h"
 #include "startup_manager.h"
+#include "startup_json.h"
 
 using namespace aknet;
 
@@ -2181,3 +2182,182 @@ TEST_CASE("Startup | StartupManager - Edge cases", "[startup]") {
     }
 
 }
+
+TEST_CASE("Startup | JSON - AppState serialization", "[startup]") {
+    using namespace startup;
+
+    SECTION("to_json converts AppState to integer") {
+        nlohmann::json j;
+
+        to_json(j, AppState::Off);
+        REQUIRE(j.is_number_integer());
+        REQUIRE(j.get<int>() == 0);
+
+        to_json(j, AppState::Booting);
+        REQUIRE(j.get<int>() == 1);
+
+        to_json(j, AppState::Active);
+        REQUIRE(j.get<int>() == 2);
+
+        to_json(j, AppState::ShuttingDown);
+        REQUIRE(j.get<int>() == 3);
+    }
+
+    SECTION("from_json converts integer to AppState") {
+        AppState state;
+
+        from_json(nlohmann::json(0), state);
+        REQUIRE(state == AppState::Off);
+
+        from_json(nlohmann::json(1), state);
+        REQUIRE(state == AppState::Booting);
+
+        from_json(nlohmann::json(2), state);
+        REQUIRE(state == AppState::Active);
+
+        from_json(nlohmann::json(3), state);
+        REQUIRE(state == AppState::ShuttingDown);
+    }
+
+    SECTION("round-trip AppState") {
+        for (auto original : {AppState::Off, AppState::Booting, AppState::Active, AppState::ShuttingDown}) {
+            nlohmann::json j = original;
+            AppState restored = j.get<AppState>();
+            REQUIRE(restored == original);
+        }
+    }
+
+    SECTION("from_json throws on invalid integer") {
+        AppState state;
+        REQUIRE_THROWS(from_json(nlohmann::json(999), state));
+    }
+}
+
+TEST_CASE("Startup | JSON - StepStatus serialization", "[startup]") {
+    using namespace startup;
+
+    SECTION("to_json converts StepStatus to integer") {
+        nlohmann::json j;
+
+        to_json(j, StepStatus::Pending);
+        REQUIRE(j.get<int>() == 0);
+
+        to_json(j, StepStatus::Running);
+        REQUIRE(j.get<int>() == 1);
+
+        to_json(j, StepStatus::Success);
+        REQUIRE(j.get<int>() == 2);
+
+        to_json(j, StepStatus::Failed);
+        REQUIRE(j.get<int>() == 3);
+
+        to_json(j, StepStatus::TimedOut);
+        REQUIRE(j.get<int>() == 4);
+
+        to_json(j, StepStatus::Skipped);
+        REQUIRE(j.get<int>() == 5);
+
+        to_json(j, StepStatus::Aborted);
+        REQUIRE(j.get<int>() == 6);
+    }
+
+    SECTION("from_json converts integer to StepStatus") {
+        StepStatus status;
+
+        from_json(nlohmann::json(0), status);
+        REQUIRE(status == StepStatus::Pending);
+
+        from_json(nlohmann::json(6), status);
+        REQUIRE(status == StepStatus::Aborted);
+    }
+
+    SECTION("round-trip StepStatus") {
+        for (auto original : {StepStatus::Pending, StepStatus::Running, StepStatus::Success,
+                              StepStatus::Failed, StepStatus::TimedOut, StepStatus::Skipped, StepStatus::Aborted}) {
+            nlohmann::json j = original;
+            StepStatus restored = j.get<StepStatus>();
+            REQUIRE(restored == original);
+                              }
+    }
+
+    SECTION("from_json throws on invalid integer") {
+        StepStatus status;
+        REQUIRE_THROWS(from_json(nlohmann::json(999), status));
+    }
+}
+
+TEST_CASE("Startup | JSON - AbortReason serialization", "[startup]") {
+    using namespace startup;
+
+    SECTION("to_json converts AbortReason to integer") {
+        nlohmann::json j;
+
+        to_json(j, AbortReason::None);
+        REQUIRE(j.get<int>() == 0);
+
+        to_json(j, AbortReason::UserRequested);
+        REQUIRE(j.get<int>() == 1);
+
+        to_json(j, AbortReason::Timeout);
+        REQUIRE(j.get<int>() == 2);
+
+        to_json(j, AbortReason::CriticalFailure);
+        REQUIRE(j.get<int>() == 3);
+
+        to_json(j, AbortReason::SystemShutdown);
+        REQUIRE(j.get<int>() == 4);
+    }
+
+    SECTION("round-trip AbortReason") {
+        for (auto original : {AbortReason::None, AbortReason::UserRequested, AbortReason::Timeout,
+                              AbortReason::CriticalFailure, AbortReason::SystemShutdown}) {
+            nlohmann::json j = original;
+            AbortReason restored = j.get<AbortReason>();
+            REQUIRE(restored == original);}
+    }
+
+    SECTION("from_json throws on invalid integer") {
+        AbortReason reason;
+        REQUIRE_THROWS(from_json(nlohmann::json(-1), reason));
+        REQUIRE_THROWS(from_json(nlohmann::json(999), reason));
+    }
+}
+
+TEST_CASE("Startup | JSON - Result serialization", "[startup]") {
+    using namespace startup;
+
+    SECTION("to_json converts Result to object") {
+        Result result{true, ""};
+        nlohmann::json j = result;
+
+        REQUIRE(j.is_object());
+        REQUIRE(j["ok"].get<bool>() == true);
+        REQUIRE(j["error"].get<std::string>() == "");
+    }
+
+    SECTION("to_json includes error message") {
+        Result result{false, "Something went wrong"};
+        nlohmann::json j = result;
+
+        REQUIRE(j["ok"].get<bool>() == false);
+        REQUIRE(j["error"].get<std::string>() == "Something went wrong");
+    }
+
+    SECTION("from_json converts object to Result") {
+        nlohmann::json j = {{"ok", true}, {"error", ""}};
+        Result result = j.get<Result>();
+
+        REQUIRE(result.ok == true);
+        REQUIRE(result.error == "");
+    }
+
+    SECTION("round-trip Result") {
+        Result original{false, "Test error"};
+        nlohmann::json j = original;
+        Result restored = j.get<Result>();
+
+        REQUIRE(restored.ok == original.ok);
+        REQUIRE(restored.error == original.error);
+    }
+}
+

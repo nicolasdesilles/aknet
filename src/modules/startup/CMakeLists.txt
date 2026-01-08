@@ -7,6 +7,7 @@ target_sources(aknet_startup
         src/startup.cpp
         src/startup_engine.cpp
         src/startup_manager.cpp
+        src/startup_json.cpp
         PUBLIC FILE_SET HEADERS
         BASE_DIRS include
         FILES
@@ -15,6 +16,7 @@ target_sources(aknet_startup
         include/startup_step.h
         include/startup_engine.h
         include/startup_manager.h
+        include/startup_json.h
 )
 
 
@@ -30,4 +32,4 @@ target_include_directories(aknet_startup
 target_compile_features(aknet_startup PRIVATE cxx_std_23)
 
 # External dependencies
-target_link_libraries(aknet_startup PUBLIC aknet_logger aknet_settings)
+target_link_libraries(aknet_startup PUBLIC aknet_logger aknet_settings nlohmann_json::nlohmann_json)
