@@ -18,6 +18,8 @@ namespace aknet::startup {
         engine_ = std::make_unique<StartupEngine>(logger_, settings, std::move(clock));
 
         worker_thread_ = std::thread(&StartupManager::worker_thread_fn, this);
+
+        logger_->info("Startup manager initialized.");
     }
 
     StartupManager::~StartupManager() {

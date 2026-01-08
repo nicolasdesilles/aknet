@@ -13,6 +13,7 @@
 // aknet utils and modules
 #include <logger.h>
 #include <settings.h>
+#include <startup_manager.h>
 
 namespace aknet {
 
@@ -35,8 +36,9 @@ namespace aknet {
 
         void test_function();
 
-        // Future: accessors for owned modules
-        // ModuleA& module_a();
+        // Accessors for owned modules
+        startup::StartupManager& startup_manager() { return *startup_manager_; }
+        const startup::StartupManager& startup_manager() const { return *startup_manager_; }
 
         settings::Settings settings_;
 
@@ -45,8 +47,8 @@ namespace aknet {
 
         void log_aknet_start_message();
 
-        // Future: owned modules
-        // std::unique_ptr<ModuleA> module_a_;
+        // Owned modules
+        std::unique_ptr<startup::StartupManager> startup_manager_;
     };
 
 } // namespace aknet

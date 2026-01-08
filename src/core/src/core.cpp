@@ -35,8 +35,20 @@ namespace aknet {
         // Applying log level stored in settings
         log::set_global_log_level(log::string_to_log_level(settings_.snapshot()->general.log_level));
 
-        // Future: create owned modules here
-        // module_a_ = std::make_unique<ModuleA>();
+        // Startup manager init
+        auto startup_logger = log::get("startup");
+
+        // Create a shared_ptr with a no-op deleter since core owns settings_
+        auto settings_ptr = std::shared_ptr<settings::Settings>(
+            &settings_,
+            [](settings::Settings*){} // no-op deleter
+        );
+
+        startup_manager_ = std::make_unique<startup::StartupManager>(
+            startup_logger,
+            settings_ptr
+        );
+
 
         logger_->info("Initializing Core: Done.");
     }
@@ -45,7 +57,8 @@ namespace aknet {
     core::~core() {
         logger_->info("Core shutting down...");
 
-        // Future: modules are destroyed automatically (unique_ptr, reverse order)
+        // Destroy modules
+        startup_manager_.reset();
         
         // Shutdown settings system
         settings_.shutdown();
