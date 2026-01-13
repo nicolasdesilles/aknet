@@ -31,6 +31,9 @@ namespace aknet::startup {
 
         struct RunOptions {
             bool reset_progress_before_run = true;
+            std::function<void(const SequenceProgress&)> progress_callback = nullptr;
+            std::function<void(int, const std::string&)> step_started_callback = nullptr;
+            std::function<void(int, const std::string&, StepStatus)> step_completed_callback = nullptr;
         };
 
         // Constructor
@@ -61,7 +64,7 @@ namespace aknet::startup {
         // Synchronous run: executes steps in order and returns the final progress snapshot.
         const SequenceProgress& run(const RunOptions& options);
 
-        Result retry();
+        Result retry(const RunOptions& options = {true, nullptr,nullptr,nullptr});
 
         // cancellation: runner checks between steps; steps can check via StepContext.
         void request_abort(AbortReason reason = AbortReason::UserRequested);
@@ -93,6 +96,10 @@ namespace aknet::startup {
 
         std::vector<StepPtr> steps_;
         SequenceProgress progress_{};
+
+        std::function<void(const SequenceProgress&)> current_progress_callback_;
+        std::function<void(int, const std::string&)> current_step_started_callback_;
+        std::function<void(int, const std::string&, StepStatus)> current_step_completed_callback_;
     };
 
 } // namespace aknet::startup

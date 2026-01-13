@@ -13,6 +13,9 @@
 #include <thread>
 #include <condition_variable>
 
+#include <functional.hpp>
+#include <ereignis/manager/manager.hpp>
+
 #include "startup.h"
 #include "startup_engine.h"
 
@@ -62,6 +65,36 @@ namespace aknet::startup {
         bool is_running() const;
         bool can_retry() const;
 
+        // Event System
+
+        // Event types that StartupManager can fire
+        enum class Event : std::uint8_t {
+            ProgressChanged,     // Fired after each step completes (with full progress snapshot)
+            StateChanged,        // Fired on AppState transitions (e.g., Off→Booting→Active)
+            StepStarted,         // Fired when a step begins execution
+            StepCompleted,       // Fired when a step finishes (success/fail/timeout/abort)
+            SequenceCompleted,   // Fired when entire sequence finishes
+            Error                // Fired on critical errors
+        };
+
+        // Event manager type (ereignis)
+        // All events are fired from the worker thread.
+        // Subscribers will be called from the worker thread - ensure thread safety in handlers.
+        using Events = ereignis::manager<
+            ereignis::event<Event::ProgressChanged, void(const SequenceProgress&)>,
+            ereignis::event<Event::StateChanged, void(AppState, AppState)>,  // old_state, new_state
+            ereignis::event<Event::StepStarted, void(int, const std::string&)>,  // index, id
+            ereignis::event<Event::StepCompleted, void(int, const std::string&, StepStatus)>,  // index, id, status
+            ereignis::event<Event::SequenceCompleted, void(bool, const std::string&)>,  // success, error_msg
+            ereignis::event<Event::Error, void(const std::string&)>  // error_msg
+        >;
+
+        // Event Access
+
+        // Get the event manager to subscribe to events
+        Events& events() { return events_; }
+        const Events& events() const { return events_; }
+
 
     private:
         void worker_thread_fn();
@@ -73,6 +106,8 @@ namespace aknet::startup {
         std::atomic<bool> should_run_{false};
         std::atomic<bool> should_stop_{false};
         std::atomic<bool> is_running_{false};
+
+        Events events_;
 
         // mutex
         mutable std::mutex mutex_;

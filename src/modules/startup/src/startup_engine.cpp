@@ -140,6 +140,11 @@ namespace aknet::startup {
 
         logger_->info("Running startup sequence...");
 
+        // Store callbacks for use in run_step()
+        current_progress_callback_ = options.progress_callback;
+        current_step_started_callback_ = options.step_started_callback;
+        current_step_completed_callback_ = options.step_completed_callback;
+
         if (steps_.empty()) {
             logger_->error("No steps provided to StartupEngine::run");
 
@@ -197,6 +202,10 @@ namespace aknet::startup {
 
             bool continue_sequence = run_step(i);
 
+            if (options.progress_callback) {
+                options.progress_callback(progress_);
+            }
+
             if (!continue_sequence) {
                 return progress_;
             }
@@ -208,11 +217,21 @@ namespace aknet::startup {
         progress_.state = AppState::Active;
         progress_.current_step_index = -1;
 
+        // Fire final progress callback
+        if (options.progress_callback) {
+            options.progress_callback(progress_);
+        }
+
+        // Clear callbacks after run
+        current_progress_callback_ = nullptr;
+        current_step_started_callback_ = nullptr;
+        current_step_completed_callback_ = nullptr;
+
         return progress_;
 
     }
 
-    Result StartupEngine::retry() {
+    Result StartupEngine::retry(const RunOptions& options) {
 
         // we can only retry if the last run failed and can_retry is true
         if (progress_.state != AppState::Off) {
@@ -232,7 +251,7 @@ namespace aknet::startup {
         rebuild_progress_snapshot(AppState::Booting);
 
         // run the sequence again
-        run({.reset_progress_before_run = false});
+        run(options);
 
         return {.ok = true};
     }
@@ -295,8 +314,6 @@ namespace aknet::startup {
 
         progress_.current_step_index = static_cast<int>(index);
 
-        logger_->info("Running step {}...", steps_[index]->config().id);
-
         auto &step_progress = progress_.steps[index];
         step_progress.status = StepStatus::Running;
         step_progress.start_time = clock_->now();
@@ -319,6 +336,12 @@ namespace aknet::startup {
         ctx.logger = logger_;
         ctx.settings = settings_.get();
 
+        logger_->info("Running step {}...", steps_[index]->config().id);
+
+        // Fire StepStarted callback
+        if (current_step_started_callback_) {
+            current_step_started_callback_(static_cast<int>(index), step_config.id);
+        }
 
         StepResult result = steps_[index]->run(ctx);
 
@@ -368,6 +391,10 @@ namespace aknet::startup {
             transition_to_off_with_error("Step " + step_config.id + " was aborted and was critical", true);
             return false; // Stop sequence run
 
+        }
+
+        if (current_step_completed_callback_) {
+            current_step_completed_callback_(static_cast<int>(index), step_config.id, step_progress.status);
         }
 
         return true;

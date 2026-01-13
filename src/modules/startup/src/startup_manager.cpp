@@ -180,29 +180,72 @@ namespace aknet::startup {
             // Check if we should retry or run fresh (while holding lock)
             bool should_retry = engine_->can_retry();
 
-            // Release lock before running sequence (this can take a long time)
+            // Capture old state for event (use cached_progress_)
+            AppState old_state = cached_progress_.state;
+
+            // Release lock before running sequence
             lock.unlock();
 
             logger_->info("StartupManager executing sequence...");
 
+            // Fire StateChanged: old_state to Booting
+            AppState starting_state = AppState::Booting;
+            if (old_state != starting_state) {
+                events_.get<Event::StateChanged>().fire(old_state, starting_state);
+            }
+
             // Run sequence without holding lock
+
+            StartupEngine::RunOptions run_options;
+
+            run_options.progress_callback = [this](const SequenceProgress& progress) {
+                events_.get<Event::ProgressChanged>().fire(progress);
+            };
+
+            run_options.step_started_callback = [this](int index, const std::string& id) {
+                events_.get<Event::StepStarted>().fire(index, id);
+            };
+
+            run_options.step_completed_callback = [this](int index, const std::string& id, StepStatus status) {
+                events_.get<Event::StepCompleted>().fire(index, id, status);
+            };
+
             if (should_retry) {
-                engine_->retry();
+                engine_->retry(run_options);
             } else {
-                engine_->run({});
+                engine_->run(run_options);
             }
 
             // Re-acquire lock to update cached progress
             lock.lock();
 
-            // Update cached progress
             cached_progress_ = engine_->progress();
+            AppState final_state = cached_progress_.state;
 
             // Clear running flag after completion
             is_running_.store(false, std::memory_order_release);
 
             logger_->info("StartupManager sequence completed: state={}",
                          static_cast<int>(cached_progress_.state));
+
+            // Release lock before firing events
+            lock.unlock();
+
+            // Fire StateChanged: Booting → Active/Off
+            if (starting_state != final_state) {
+                events_.get<Event::StateChanged>().fire(starting_state, final_state);
+            }
+
+            // Fire Error event if there's a critical error
+            if (cached_progress_.last_error.has_value() && !cached_progress_.last_error.value().empty()) {
+                events_.get<Event::Error>().fire(cached_progress_.last_error.value());
+            }
+
+            // Fire SequenceCompleted event
+            bool success = (final_state == AppState::Active);
+            std::string error_msg = cached_progress_.last_error.value_or("");
+            events_.get<Event::SequenceCompleted>().fire(success, error_msg);
+
         }
 
         logger_->debug("StartupManager worker thread stopped");
