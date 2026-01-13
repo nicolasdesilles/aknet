@@ -19,6 +19,14 @@ namespace aknet::startup {
 
         worker_thread_ = std::thread(&StartupManager::worker_thread_fn, this);
 
+        // Wait for thread to reach its wait state
+        {
+            std::unique_lock lock(mutex_);
+            cv_.wait(lock, [this] {
+                return thread_ready_.load(std::memory_order_acquire);
+            });
+        }
+
         logger_->info("Startup manager initialized.");
     }
 
@@ -154,6 +162,13 @@ namespace aknet::startup {
 
     void StartupManager::worker_thread_fn() {
         logger_->debug("StartupManager worker thread started");
+
+        // Signal that we're ready
+        {
+            std::lock_guard lock(mutex_);
+            thread_ready_.store(true, std::memory_order_release);
+        }
+        cv_.notify_one();  // Wake up constructor
 
         while (!should_stop_.load(std::memory_order_acquire)) {
             std::unique_lock lock(mutex_);

@@ -103,6 +103,7 @@ namespace aknet::startup {
         std::shared_ptr<StartupEngine> engine_;
 
         std::thread worker_thread_;
+        std::atomic<bool> thread_ready_{false};
         std::atomic<bool> should_run_{false};
         std::atomic<bool> should_stop_{false};
         std::atomic<bool> is_running_{false};

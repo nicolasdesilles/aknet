@@ -12,6 +12,7 @@
 #include <logger.h>
 #include <settings.h>
 #include <thread>
+#include <memory>
 
 #include "startup.h"
 #include "clock.h"
@@ -79,6 +80,26 @@ public:
     }
 };
 
+// A step that takes real time to execute (for abort testing)
+class SlowRealStep : public startup::IStartupStep {
+    startup::StepConfig config_;
+public:
+    explicit SlowRealStep(startup::StepConfig cfg) : config_(std::move(cfg)) {}
+
+    const startup::StepConfig& config() const override { return config_; }
+
+    startup::StepResult run(startup::StepContext& ctx) override {
+        // Sleep in small increments to allow abort checking
+        for (int i = 0; i < 15; ++i) {
+            if (ctx.abort_requested()) {
+                return {startup::StepStatus::Aborted, "Aborted"};
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return {startup::StepStatus::Success, "Completed"};
+    }
+};
+
 // A step that simulates slow execution by advancing the clock
 class SlowStep : public startup::IStartupStep {
     startup::StepConfig config_;
@@ -111,9 +132,10 @@ struct EngineTestFixture {
     std::shared_ptr<log::Logger> logger_startup;
     std::shared_ptr<settings::Settings> settings;
     std::shared_ptr<FakeClock> clock;
+    TempDir temp_dir;
 
     EngineTestFixture() {
-        TempDir temp_dir;
+
         log::init(temp_dir.path());
         logger_settings = log::get("settings");
         logger_startup = log::get("startup_t");
@@ -1673,18 +1695,6 @@ TEST_CASE("Startup | StartupManager - Basic async execution", "[startup]") {
         auto real_clock = std::make_shared<startup::SteadyClock>();
         startup::StartupManager manager(f.logger_startup, f.settings, real_clock);
 
-        // Create a step that takes some time
-        class SlowRealStep : public startup::IStartupStep {
-            startup::StepConfig config_;
-        public:
-            explicit SlowRealStep(startup::StepConfig cfg) : config_(std::move(cfg)) {}
-            const startup::StepConfig& config() const override { return config_; }
-            startup::StepResult run(startup::StepContext&) override {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                return {startup::StepStatus::Success, "OK"};
-            }
-        };
-
         std::vector<startup::StartupManager::StepPtr> steps;
         steps.push_back(std::make_unique<SlowRealStep>(
             startup::StepConfig{.id = "slow", .display_name = "Slow", .timeout = std::chrono::seconds{5}}
@@ -1871,18 +1881,6 @@ TEST_CASE("Startup | StartupManager - Thread safety", "[startup]") {
         auto real_clock = std::make_shared<startup::SteadyClock>();
         startup::StartupManager manager(f.logger_startup, f.settings, real_clock);
 
-        // Create multiple steps that take a bit of time
-        class SlowRealStep : public startup::IStartupStep {
-            startup::StepConfig config_;
-        public:
-            explicit SlowRealStep(startup::StepConfig cfg) : config_(std::move(cfg)) {}
-            const startup::StepConfig& config() const override { return config_; }
-            startup::StepResult run(startup::StepContext&) override {
-                std::this_thread::sleep_for(std::chrono::milliseconds(20));
-                return {startup::StepStatus::Success, "OK"};
-            }
-        };
-
         std::vector<startup::StartupManager::StepPtr> steps;
         for (int i = 0; i < 5; ++i) {
             steps.push_back(std::make_unique<SlowRealStep>(
@@ -1924,18 +1922,6 @@ TEST_CASE("Startup | StartupManager - Thread safety", "[startup]") {
         EngineTestFixture f;
         auto real_clock = std::make_shared<startup::SteadyClock>();
         startup::StartupManager manager(f.logger_startup, f.settings, real_clock);
-
-        // Create a step that takes some time
-        class SlowRealStep : public startup::IStartupStep {
-            startup::StepConfig config_;
-        public:
-            explicit SlowRealStep(startup::StepConfig cfg) : config_(std::move(cfg)) {}
-            const startup::StepConfig& config() const override { return config_; }
-            startup::StepResult run(startup::StepContext&) override {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                return {startup::StepStatus::Success, "OK"};
-            }
-        };
 
         std::vector<startup::StartupManager::StepPtr> steps;
         steps.push_back(std::make_unique<SlowRealStep>(
@@ -2054,18 +2040,6 @@ TEST_CASE("Startup | StartupManager - Edge cases", "[startup]") {
         EngineTestFixture f;
         auto real_clock = std::make_shared<startup::SteadyClock>();
         startup::StartupManager manager(f.logger_startup, f.settings, real_clock);
-
-        // Create a step that takes some time
-        class SlowRealStep : public startup::IStartupStep {
-            startup::StepConfig config_;
-        public:
-            explicit SlowRealStep(startup::StepConfig cfg) : config_(std::move(cfg)) {}
-            const startup::StepConfig& config() const override { return config_; }
-            startup::StepResult run(startup::StepContext&) override {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                return {startup::StepStatus::Success, "OK"};
-            }
-        };
 
         std::vector<startup::StartupManager::StepPtr> steps;
         steps.push_back(std::make_unique<SlowRealStep>(
@@ -3507,5 +3481,452 @@ TEST_CASE("Startup | Events - Complete event flow integration", "[startup]") {
 
         // Last event should be SequenceCompleted with success
         REQUIRE(event_log.back() == "SEQUENCE:SUCCESS");
+    }
+
+    SECTION("Events fire in deterministic order") {
+        std::vector<std::string> event_order;
+        std::mutex log_mutex;  // Protect shared vector from race conditions
+
+        manager.events().get<startup::StartupManager::Event::StateChanged>()
+            .add([&](startup::AppState old_s, startup::AppState new_s) {
+                std::lock_guard lock(log_mutex);
+                event_order.push_back("STATE");
+            });
+
+        manager.events().get<startup::StartupManager::Event::StepStarted>()
+            .add([&](int, const std::string&) {
+                std::lock_guard lock(log_mutex);
+                event_order.push_back("STEP_START");
+            });
+
+        manager.events().get<startup::StartupManager::Event::StepCompleted>()
+            .add([&](int, const std::string&, startup::StepStatus) {
+                std::lock_guard lock(log_mutex);
+                event_order.push_back("STEP_COMPLETE");
+            });
+
+        manager.events().get<startup::StartupManager::Event::ProgressChanged>()
+            .add([&](const startup::SequenceProgress&) {
+                std::lock_guard lock(log_mutex);
+                event_order.push_back("PROGRESS");
+            });
+
+        manager.events().get<startup::StartupManager::Event::SequenceCompleted>()
+            .add([&](bool, const std::string&) {
+                std::lock_guard lock(log_mutex);
+                event_order.push_back("SEQUENCE");
+            });
+
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        manager.set_steps(std::move(steps));
+        manager.start_async();
+
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        // Verify order: STATE (Off→Booting), STEP_START, STEP_COMPLETE, PROGRESS, STATE (Booting→Active), SEQUENCE
+        REQUIRE(event_order.size() >= 6);
+        REQUIRE(event_order[0] == "STATE");  // Off→Booting
+        REQUIRE(event_order[1] == "STEP_START");
+        REQUIRE(event_order[2] == "STEP_COMPLETE");
+        REQUIRE(event_order.back() == "SEQUENCE");
+    }
+}
+
+TEST_CASE("Startup | Events - Multiple subscribers", "[startup]") {
+
+    EngineTestFixture f;
+    auto real_clock = std::make_shared<startup::SteadyClock>();
+    startup::StartupManager manager(f.logger_startup, f.settings, real_clock);
+
+    SECTION("Multiple subscribers all receive StateChanged events") {
+        int subscriber1_count = 0;
+        int subscriber2_count = 0;
+        int subscriber3_count = 0;
+
+        manager.events().get<startup::StartupManager::Event::StateChanged>()
+            .add([&](startup::AppState, startup::AppState) {
+                subscriber1_count++;
+            });
+
+        manager.events().get<startup::StartupManager::Event::StateChanged>()
+            .add([&](startup::AppState, startup::AppState) {
+                subscriber2_count++;
+            });
+
+        manager.events().get<startup::StartupManager::Event::StateChanged>()
+            .add([&](startup::AppState, startup::AppState) {
+                subscriber3_count++;
+            });
+
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        manager.set_steps(std::move(steps));
+        manager.start_async();
+
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        // All three subscribers should have received the same number of events
+        REQUIRE(subscriber1_count >= 2);  // At least Off→Booting and Booting→Active
+        REQUIRE(subscriber1_count == subscriber2_count);
+        REQUIRE(subscriber2_count == subscriber3_count);
+    }
+
+    SECTION("Multiple subscribers on different event types all receive events") {
+        bool state_received = false;
+        bool progress_received = false;
+        bool step_started_received = false;
+        bool step_completed_received = false;
+        bool sequence_completed_received = false;
+
+        manager.events().get<startup::StartupManager::Event::StateChanged>()
+            .add([&](startup::AppState, startup::AppState) {
+                state_received = true;
+            });
+
+        manager.events().get<startup::StartupManager::Event::ProgressChanged>()
+            .add([&](const startup::SequenceProgress&) {
+                progress_received = true;
+            });
+
+        manager.events().get<startup::StartupManager::Event::StepStarted>()
+            .add([&](int, const std::string&) {
+                step_started_received = true;
+            });
+
+        manager.events().get<startup::StartupManager::Event::StepCompleted>()
+            .add([&](int, const std::string&, startup::StepStatus) {
+                step_completed_received = true;
+            });
+
+        manager.events().get<startup::StartupManager::Event::SequenceCompleted>()
+            .add([&](bool, const std::string&) {
+                sequence_completed_received = true;
+            });
+
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        manager.set_steps(std::move(steps));
+        manager.start_async();
+
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        REQUIRE(state_received);
+        REQUIRE(progress_received);
+        REQUIRE(step_started_received);
+        REQUIRE(step_completed_received);
+        REQUIRE(sequence_completed_received);
+    }
+}
+
+TEST_CASE("Startup | Events - Unsubscribe", "[startup]") {
+
+    EngineTestFixture f;
+    auto real_clock = std::make_shared<startup::SteadyClock>();
+    startup::StartupManager manager(f.logger_startup, f.settings, real_clock);
+
+    SECTION("Unsubscribed handler does not receive events") {
+        int active_count = 0;
+        int removed_count = 0;
+
+        // This subscriber will remain active
+        manager.events().get<startup::StartupManager::Event::StateChanged>()
+            .add([&](startup::AppState, startup::AppState) {
+                active_count++;
+            });
+
+        // This subscriber will be removed before the sequence runs
+        auto subscription_id = manager.events().get<startup::StartupManager::Event::StateChanged>()
+            .add([&](startup::AppState, startup::AppState) {
+                removed_count++;
+            });
+
+        // Remove the second subscriber BEFORE running
+        manager.events().get<startup::StartupManager::Event::StateChanged>()
+            .remove(subscription_id);
+
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        manager.set_steps(std::move(steps));
+        manager.start_async();
+
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        REQUIRE(active_count >= 2);  // Active subscriber received events
+        REQUIRE(removed_count == 0);  // Removed subscriber received NOTHING
+    }
+
+    SECTION("clear() removes all subscribers") {
+        int count = 0;
+
+        manager.events().get<startup::StartupManager::Event::StateChanged>()
+            .add([&](startup::AppState, startup::AppState) {
+                count++;
+            });
+
+        manager.events().get<startup::StartupManager::Event::StateChanged>()
+            .add([&](startup::AppState, startup::AppState) {
+                count++;
+            });
+
+        // Clear all subscribers
+        manager.events().get<startup::StartupManager::Event::StateChanged>().clear();
+
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        manager.set_steps(std::move(steps));
+        manager.start_async();
+
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        REQUIRE(count == 0);  // No events received after clear()
+    }
+}
+
+TEST_CASE("Startup | Events - Abort behavior", "[startup]") {
+
+    EngineTestFixture f;
+    auto real_clock = std::make_shared<startup::SteadyClock>();
+    startup::StartupManager manager(f.logger_startup, f.settings, real_clock);
+
+    SECTION("Aborted steps do not fire StepStarted/StepCompleted") {
+        std::vector<std::string> event_log;
+
+        manager.events().get<startup::StartupManager::Event::StepStarted>()
+            .add([&](int index, const std::string& id) {
+                event_log.push_back("START:" + id);
+            });
+
+        manager.events().get<startup::StartupManager::Event::StepCompleted>()
+            .add([&](int index, const std::string& id, startup::StepStatus status) {
+                event_log.push_back("COMPLETE:" + id + ":" + std::to_string(static_cast<int>(status)));
+            });
+
+        // Use a slow step so we have time to abort
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<SlowRealStep>(
+            startup::StepConfig{.id = "slow_step", .display_name = "Slow Step", .timeout = std::chrono::seconds{10}}
+        ));
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "never_reached", .display_name = "Never Reached", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        manager.set_steps(std::move(steps));
+        manager.start_async();
+
+        // Wait a bit then abort
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        manager.request_abort();
+
+        // Wait for completion
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        // Should have started slow_step
+        bool slow_started = false;
+        bool never_reached_started = false;
+
+        for (const auto& evt : event_log) {
+            if (evt.find("START:slow_step") != std::string::npos) slow_started = true;
+            if (evt.find("START:never_reached") != std::string::npos) never_reached_started = true;
+        }
+
+        REQUIRE(slow_started);
+        REQUIRE_FALSE(never_reached_started);  // This step should never have started
+    }
+
+    SECTION("StateChanged fires correctly when aborted (Booting to Off)") {
+        std::vector<std::pair<startup::AppState, startup::AppState>> state_changes;
+
+        manager.events().get<startup::StartupManager::Event::StateChanged>()
+            .add([&](startup::AppState old_s, startup::AppState new_s) {
+                state_changes.push_back({old_s, new_s});
+            });
+
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<SlowRealStep>(
+            startup::StepConfig{.id = "slow_step", .display_name = "Slow Step", .timeout = std::chrono::seconds{10}}
+        ));
+
+        manager.set_steps(std::move(steps));
+        manager.start_async();
+
+        // Wait a bit then abort
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        manager.request_abort();
+
+        // Wait for completion
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        // Should have: Off→Booting, then Booting→Off (due to abort)
+        REQUIRE(state_changes.size() >= 2);
+        REQUIRE(state_changes[0].first == startup::AppState::Off);
+        REQUIRE(state_changes[0].second == startup::AppState::Booting);
+        REQUIRE(state_changes[1].first == startup::AppState::Booting);
+        REQUIRE(state_changes[1].second == startup::AppState::Off);
+    }
+
+    SECTION("SequenceCompleted fires with success=false when aborted") {
+        bool sequence_completed_fired = false;
+        bool success_value = true;  // Start with true to verify it changes
+        std::string error_msg;
+
+        manager.events().get<startup::StartupManager::Event::SequenceCompleted>()
+            .add([&](bool success, const std::string& msg) {
+                sequence_completed_fired = true;
+                success_value = success;
+                error_msg = msg;
+            });
+
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<SlowRealStep>(
+            startup::StepConfig{.id = "slow_step", .display_name = "Slow Step", .timeout = std::chrono::seconds{10}}
+        ));
+
+        manager.set_steps(std::move(steps));
+        manager.start_async();
+
+        // Wait a bit then abort
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        manager.request_abort();
+
+        // Wait for completion
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        REQUIRE(sequence_completed_fired);
+        REQUIRE(success_value == false);  // Abort means failure
+    }
+}
+
+TEST_CASE("Startup | Events - SequenceCompleted", "[startup]") {
+
+    EngineTestFixture f;
+    auto real_clock = std::make_shared<startup::SteadyClock>();
+    startup::StartupManager manager(f.logger_startup, f.settings, real_clock);
+
+    SECTION("SequenceCompleted fires with success=true on successful completion") {
+        bool event_fired = false;
+        bool success = false;
+        std::string error;
+
+        manager.events().get<startup::StartupManager::Event::SequenceCompleted>()
+            .add([&](bool s, const std::string& e) {
+                event_fired = true;
+                success = s;
+                error = e;
+            });
+
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        manager.set_steps(std::move(steps));
+        manager.start_async();
+
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        REQUIRE(event_fired);
+        REQUIRE(success == true);
+        REQUIRE(error.empty());
+    }
+
+    SECTION("SequenceCompleted fires with success=false and error message on failure") {
+        bool event_fired = false;
+        bool success = true;
+        std::string error;
+
+        manager.events().get<startup::StartupManager::Event::SequenceCompleted>()
+            .add([&](bool s, const std::string& e) {
+                event_fired = true;
+                success = s;
+                error = e;
+            });
+
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "fail_step", .display_name = "Fail Step", .timeout = std::chrono::seconds{5}, .critical = true},
+            startup::StepResult{startup::StepStatus::Failed, "Critical error"}
+        ));
+
+        manager.set_steps(std::move(steps));
+        manager.start_async();
+
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        REQUIRE(event_fired);
+        REQUIRE(success == false);
+        REQUIRE_FALSE(error.empty());
     }
 }
