@@ -25,7 +25,10 @@ target_include_directories(aknet_core
 target_link_libraries(aknet_core PUBLIC
         aknet_logger
         aknet_settings
-        aknet_startup)
+        aknet_startup
+        aknet_bridge
+        saucer::saucer
+)
 
 
 

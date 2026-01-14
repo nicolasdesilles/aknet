@@ -15,6 +15,13 @@
 #include <settings.h>
 #include <startup_manager.h>
 
+// Saucer webview
+#include <saucer/smartview.hpp>
+
+namespace aknet::bridge {
+    class EventBridge;
+}
+
 namespace aknet {
 
     struct core_config {
@@ -40,6 +47,11 @@ namespace aknet {
         startup::StartupManager& startup_manager() { return *startup_manager_; }
         const startup::StartupManager& startup_manager() const { return *startup_manager_; }
 
+        template<typename WebviewT>
+        void init_bridge(WebviewT* webview);
+
+        void process_bridge_queue();
+
         settings::Settings settings_;
 
     private:
@@ -49,6 +61,7 @@ namespace aknet {
 
         // Owned modules
         std::unique_ptr<startup::StartupManager> startup_manager_;
+        std::unique_ptr<bridge::EventBridge> bridge_;
     };
 
 } // namespace aknet

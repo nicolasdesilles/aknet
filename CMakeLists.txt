@@ -52,6 +52,7 @@ add_subdirectory(src/core)
 
 # Modules
 add_subdirectory(src/modules/startup)
+add_subdirectory(src/modules/bridge)
 
 # Utils
 add_subdirectory(src/utils/logger)
@@ -68,6 +69,7 @@ if(AKNET_BUILD_TESTS)
     # Module tests
     add_subdirectory(src/core/tests)
     add_subdirectory(src/modules/startup/tests)
+    add_subdirectory(src/modules/bridge/tests)
     add_subdirectory(src/utils/logger/tests)
     add_subdirectory(src/utils/settings/tests)
 
@@ -79,6 +81,7 @@ if(AKNET_BUILD_TESTS)
             ${AKNET_LOGGER_TEST_SOURCES}
             ${AKNET_SETTINGS_TEST_SOURCES}
             ${AKNET_STARTUP_TEST_SOURCES}
+            ${AKNET_BRIDGE_TEST_SOURCES}
             ${AKNET_CORE_TEST_SOURCES}
             ${AKNET_INTEGRATION_TEST_SOURCES}
     )
@@ -89,6 +92,7 @@ if(AKNET_BUILD_TESTS)
             aknet_logger
             aknet_settings
             aknet_startup
+            aknet_bridge
             nlohmann_json::nlohmann_json
             Catch2::Catch2WithMain
     )

@@ -9,14 +9,22 @@ namespace {
 coco::stray start(saucer::application* app)
 {
     auto window  = saucer::window::create(app).value();
-    auto webview = saucer::smartview<>::create({.window = window});
+    auto webview = saucer::smartview<>::create({.window = window}).value();
 
     window->set_title("aknet");
 
-    webview->expose("log_test_msg", []() { g_core->test_function(); });
+    // Initialize the UI bridge
+    g_core->init_bridge(&webview);
 
-    webview->embed(saucer::embedded::all());
-    webview->serve("/index.html");
+    webview.expose("log_test_msg", []() { g_core->test_function(); });
+
+    // Expose a function for the UI to poll for pending events
+    webview.expose("process_bridge_queue", []() { 
+        g_core->process_bridge_queue(); 
+    });
+
+    webview.embed(saucer::embedded::all());
+    webview.serve("/index.html");
     window->show();
 
     // temp Test function

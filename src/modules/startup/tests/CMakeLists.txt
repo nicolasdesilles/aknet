@@ -11,8 +11,6 @@ add_executable(aknet_startup_tests
 target_link_libraries(aknet_startup_tests
         PRIVATE
         aknet_startup
-        aknet_logger
-        aknet_settings
         Catch2::Catch2WithMain
 )
 

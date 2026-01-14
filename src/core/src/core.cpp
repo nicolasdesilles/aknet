@@ -4,6 +4,8 @@
 
 #include "core.h"
 #include <version.h>
+#include <bridge.h>
+#include <saucer/smartview.hpp>
 
 namespace aknet {
 
@@ -58,6 +60,11 @@ namespace aknet {
         logger_->info("Core shutting down...");
 
         // Destroy modules
+        if (bridge_) {
+            bridge_->disconnect();
+        }
+        bridge_.reset();
+
         startup_manager_.reset();
         
         // Shutdown settings system
@@ -73,6 +80,35 @@ namespace aknet {
     void core::test_function() {
         logger_->info("Core test function called");
     }
+
+    template<typename WebviewT>
+    void core::init_bridge(WebviewT* webview) {
+        if (bridge_) {
+            logger_->warn("Bridge already initialized");
+            return;
+        }
+
+        auto bridge_logger = log::get("bridge");
+        bridge_ = std::make_unique<bridge::EventBridge>(bridge_logger, webview);
+
+        auto manager_ptr = std::shared_ptr<startup::StartupManager>(
+            startup_manager_.get(),
+            [](startup::StartupManager*){}
+        );
+
+        bridge_->connect_startup_events(manager_ptr);
+
+        logger_->info("Bridge initialized and connected to startup events");
+    }
+
+    void core::process_bridge_queue() {
+        if (bridge_) {
+            bridge_->process_queue();
+        }
+    }
+
+    // Explicit template instantiation for saucer::smartview
+    template void core::init_bridge(saucer::smartview<>*);
 
     void core::log_aknet_start_message() {
         if (logger_) {
