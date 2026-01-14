@@ -6,6 +6,7 @@
 #include <version.h>
 #include <bridge.h>
 #include <saucer/smartview.hpp>
+#include <fake_steps.h>
 
 namespace aknet {
 
@@ -51,6 +52,9 @@ namespace aknet {
             settings_ptr
         );
 
+        // Register fake startup steps for testing
+        startup_manager_->set_steps(startup::create_default_steps());
+        logger_->info("Registered {} startup steps", 6);
 
         logger_->info("Initializing Core: Done.");
     }
@@ -109,6 +113,58 @@ namespace aknet {
 
     // Explicit template instantiation for saucer::smartview
     template void core::init_bridge(saucer::smartview<>*);
+
+    bool core::start_startup() {
+        logger_->info("Starting startup sequence...");
+        auto result = startup_manager_->start_async();
+        if (!result.ok) {
+            logger_->error("Failed to start startup sequence: {}", result.error);
+            return false;
+        }
+        return true;
+    }
+
+    void core::abort_startup() {
+        logger_->info("Aborting startup sequence...");
+        startup_manager_->request_abort(startup::AbortReason::UserRequested);
+    }
+
+    bool core::retry_startup() {
+        logger_->info("Retrying startup sequence...");
+        auto result = startup_manager_->retry_async();
+        if (!result.ok) {
+            logger_->error("Failed to retry startup sequence: {}", result.error);
+            return false;
+        }
+        return true;
+    }
+
+    void core::set_test_mode(int mode) {
+        using namespace startup;
+        
+        std::vector<std::unique_ptr<IStartupStep>> steps;
+        
+        switch (mode) {
+            case 1:  // With failure
+                steps.push_back(std::make_unique<CheckJackInstallationStep>());
+                steps.push_back(std::make_unique<DiscoverNMOSRegistryStep>());
+                steps.push_back(std::make_unique<FailingStep>());
+                steps.push_back(std::make_unique<LoadAudioDevicesStep>());
+                break;
+            case 2:  // With timeout
+                steps.push_back(std::make_unique<CheckJackInstallationStep>());
+                steps.push_back(std::make_unique<SlowStep>());
+                steps.push_back(std::make_unique<LoadAudioDevicesStep>());
+                break;
+            default:  // Normal
+                steps = create_default_steps();
+                break;
+        }
+        
+        startup_manager_->clear_steps();
+        startup_manager_->set_steps(std::move(steps));
+        logger_->info("Set test mode: {}", mode);
+    }
 
     void core::log_aknet_start_message() {
         if (logger_) {

@@ -23,6 +23,23 @@ coco::stray start(saucer::application* app)
         g_core->process_bridge_queue(); 
     });
 
+    // Startup control functions
+    webview.expose("start_startup", []() -> bool { 
+        return g_core->start_startup(); 
+    });
+
+    webview.expose("abort_startup", []() { 
+        g_core->abort_startup(); 
+    });
+
+    webview.expose("retry_startup", []() -> bool { 
+        return g_core->retry_startup(); 
+    });
+
+    webview.expose("set_test_mode", [](int mode) { 
+        g_core->set_test_mode(mode); 
+    });
+
     webview.embed(saucer::embedded::all());
     webview.serve("/index.html");
     window->show();

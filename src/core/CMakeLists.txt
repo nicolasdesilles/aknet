@@ -19,6 +19,7 @@ target_include_directories(aknet_core
         $<INSTALL_INTERFACE:include>
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/startup_steps
 )
 
 # External dependencies

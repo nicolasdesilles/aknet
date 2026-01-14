@@ -52,6 +52,12 @@ namespace aknet {
 
         void process_bridge_queue();
 
+        // Startup control (exposed to UI)
+        bool start_startup();
+        void abort_startup();
+        bool retry_startup();
+        void set_test_mode(int mode);  // 0=normal, 1=with_failure, 2=with_timeout
+
         settings::Settings settings_;
 
     private:
