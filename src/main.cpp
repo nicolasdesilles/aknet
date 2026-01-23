@@ -18,11 +18,6 @@ coco::stray start(saucer::application* app)
 
     webview.expose("log_test_msg", []() { g_core->test_function(); });
 
-    // Expose a function for the UI to poll for pending events
-    webview.expose("process_bridge_queue", []() { 
-        g_core->process_bridge_queue(); 
-    });
-
     // Startup control functions
     webview.expose("start_startup", []() -> bool { 
         return g_core->start_startup(); 

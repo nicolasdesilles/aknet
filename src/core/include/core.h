@@ -50,20 +50,23 @@ namespace aknet {
         template<typename WebviewT>
         void init_bridge(WebviewT* webview);
 
-        void process_bridge_queue();
-
         // Startup control (exposed to UI)
         bool start_startup();
         void abort_startup();
         bool retry_startup();
         void set_test_mode(int mode);  // 0=normal, 1=with_failure, 2=with_timeout
 
-        settings::Settings settings_;
+        // Settings accessor
+        settings::Settings& settings() { return settings_; }
+        const settings::Settings& settings() const { return settings_; }
 
     private:
         std::shared_ptr<log::Logger> logger_;
 
         void log_aknet_start_message();
+
+        // Settings system
+        settings::Settings settings_;
 
         // Owned modules
         std::unique_ptr<startup::StartupManager> startup_manager_;

@@ -6,7 +6,7 @@
 #include <version.h>
 #include <bridge.h>
 #include <saucer/smartview.hpp>
-#include <fake_steps.h>
+#include <steps_definition.h>
 
 namespace aknet {
 
@@ -103,12 +103,6 @@ namespace aknet {
         bridge_->connect_startup_events(manager_ptr);
 
         logger_->info("Bridge initialized and connected to startup events");
-    }
-
-    void core::process_bridge_queue() {
-        if (bridge_) {
-            bridge_->process_queue();
-        }
     }
 
     // Explicit template instantiation for saucer::smartview

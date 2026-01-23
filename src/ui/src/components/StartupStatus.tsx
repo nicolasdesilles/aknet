@@ -1,4 +1,3 @@
-import { useBridgePolling } from "@/hooks/useBridgePolling";
 import { useStartupEvents } from "@/hooks/useStartupEvents";
 import { AppState, StepStatus } from "@/types/startup";
 import {
@@ -41,7 +40,7 @@ function getAppStateLabel(state: AppState): string {
 }
 
 function getAppStateBadgeVariant(
-  state: AppState
+  state: AppState,
 ): "default" | "secondary" | "destructive" | "outline" {
   switch (state) {
     case AppState.Off:
@@ -105,8 +104,6 @@ const TEST_MODES = [
 ] as const;
 
 export function StartupStatus() {
-  useBridgePolling(16);
-
   const { progress, appState, isComplete, error } = useStartupEvents();
   const [testMode, setTestMode] = useState(0);
 
@@ -151,8 +148,8 @@ export function StartupStatus() {
               ? "Startup failed"
               : "Startup complete"
             : appState === AppState.Off
-            ? "Ready to start"
-            : "Initializing system..."}
+              ? "Ready to start"
+              : "Initializing system..."}
         </CardDescription>
       </CardHeader>
 
@@ -253,7 +250,7 @@ export function StartupStatus() {
             {JSON.stringify(
               { appState, testMode, progress, isComplete, error },
               null,
-              2
+              2,
             )}
           </pre>
         </details>

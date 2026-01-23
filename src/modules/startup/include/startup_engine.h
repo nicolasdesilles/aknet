@@ -93,6 +93,7 @@ namespace aknet::startup {
         std::shared_ptr<IClock> clock_;
 
         std::atomic_bool abort_requested_{false};
+        std::atomic<AbortReason> abort_reason_{AbortReason::None};
 
         std::vector<StepPtr> steps_;
         SequenceProgress progress_{};

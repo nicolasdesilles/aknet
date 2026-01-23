@@ -5,8 +5,8 @@
 // These simulate real operations with configurable delays and outcomes.
 //
 
-#ifndef AKNET_FAKE_STEPS_H
-#define AKNET_FAKE_STEPS_H
+#ifndef AKNET_STEPS_DEFINITION_H
+#define AKNET_STEPS_DEFINITION_H
 
 #pragma once
 
@@ -229,4 +229,4 @@ namespace aknet::startup {
 
 } // namespace aknet::startup
 
-#endif // AKNET_FAKE_STEPS_H
+#endif // AKNET_STEPS_DEFINITION_H

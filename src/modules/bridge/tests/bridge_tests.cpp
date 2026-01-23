@@ -162,127 +162,6 @@ TEST_CASE("EventBridge | Construction", "[bridge]") {
 
 }
 
-TEST_CASE("EventBridge | Queue operations", "[bridge]") {
-
-    SECTION("initial queue is empty") {
-        BridgeTestFixture f;
-        bridge::EventBridge bridge(f.logger, f.webview.get());
-
-        REQUIRE(bridge.queue_size() == 0);
-    }
-
-    SECTION("dispatch_to_ui queues a task without executing it") {
-        BridgeTestFixture f;
-        bridge::EventBridge bridge(f.logger, f.webview.get());
-
-        int executed = 0;
-        bridge.dispatch_to_ui([&executed]() { executed++; });
-
-        REQUIRE(bridge.queue_size() == 1);
-        REQUIRE(executed == 0);
-    }
-
-    SECTION("process_queue executes all queued tasks") {
-        BridgeTestFixture f;
-        bridge::EventBridge bridge(f.logger, f.webview.get());
-
-        int counter = 0;
-        bridge.dispatch_to_ui([&counter]() { counter++; });
-        bridge.dispatch_to_ui([&counter]() { counter++; });
-        bridge.dispatch_to_ui([&counter]() { counter++; });
-
-        REQUIRE(bridge.queue_size() == 3);
-
-        bridge.process_queue();
-
-        REQUIRE(counter == 3);
-        REQUIRE(bridge.queue_size() == 0);
-    }
-
-    SECTION("process_queue on empty queue is safe") {
-        BridgeTestFixture f;
-        bridge::EventBridge bridge(f.logger, f.webview.get());
-
-        REQUIRE_NOTHROW(bridge.process_queue());
-        REQUIRE(bridge.queue_size() == 0);
-    }
-
-    SECTION("tasks execute in FIFO order") {
-        BridgeTestFixture f;
-        bridge::EventBridge bridge(f.logger, f.webview.get());
-
-        std::vector<int> order;
-        bridge.dispatch_to_ui([&order]() { order.push_back(1); });
-        bridge.dispatch_to_ui([&order]() { order.push_back(2); });
-        bridge.dispatch_to_ui([&order]() { order.push_back(3); });
-
-        bridge.process_queue();
-
-        REQUIRE(order == std::vector<int>{1, 2, 3});
-    }
-
-    SECTION("dispatch_to_ui ignores null task") {
-        BridgeTestFixture f;
-        bridge::EventBridge bridge(f.logger, f.webview.get());
-
-        bridge.dispatch_to_ui(nullptr);
-
-        REQUIRE(bridge.queue_size() == 0);
-    }
-
-}
-
-TEST_CASE("EventBridge | Thread safety", "[bridge]") {
-
-    SECTION("concurrent dispatch_to_ui from multiple threads is safe") {
-        BridgeTestFixture f;
-        bridge::EventBridge bridge(f.logger, f.webview.get());
-
-        constexpr int num_threads = 10;
-        constexpr int tasks_per_thread = 10;
-        std::atomic<int> counter{0};
-
-        std::vector<std::thread> threads;
-        threads.reserve(num_threads);
-
-        for (int i = 0; i < num_threads; ++i) {
-            threads.emplace_back([&bridge, &counter]() {
-                for (int j = 0; j < tasks_per_thread; ++j) {
-                    bridge.dispatch_to_ui([&counter]() { ++counter; });
-                }
-            });
-        }
-
-        for (auto& t : threads) {
-            t.join();
-        }
-
-        REQUIRE(bridge.queue_size() == num_threads * tasks_per_thread);
-
-        bridge.process_queue();
-
-        REQUIRE(counter == num_threads * tasks_per_thread);
-        REQUIRE(bridge.queue_size() == 0);
-    }
-
-    SECTION("exception in one task does not stop processing of remaining tasks") {
-        BridgeTestFixture f;
-        bridge::EventBridge bridge(f.logger, f.webview.get());
-
-        int counter = 0;
-
-        bridge.dispatch_to_ui([&counter]() { counter++; });
-        bridge.dispatch_to_ui([]() { throw std::runtime_error("Task error"); });
-        bridge.dispatch_to_ui([&counter]() { counter++; });
-
-        REQUIRE_NOTHROW(bridge.process_queue());
-
-        REQUIRE(counter == 2);
-        REQUIRE(bridge.queue_size() == 0);
-    }
-
-}
-
 TEST_CASE("EventBridge | connect_startup_events validation", "[bridge]") {
 
     SECTION("connect_startup_events throws when manager is null") {
@@ -328,11 +207,6 @@ TEST_CASE("EventBridge | StartupManager event forwarding", "[bridge]") {
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
-        REQUIRE(bridge.queue_size() > 0);
-        REQUIRE(f.webview->call_count() == 0);
-
-        bridge.process_queue();
-
         REQUIRE(f.webview->call_count() > 0);
         REQUIRE(f.webview->has_call_containing("startup:progress"));
     }
@@ -358,8 +232,6 @@ TEST_CASE("EventBridge | StartupManager event forwarding", "[bridge]") {
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
-        bridge.process_queue();
-
         REQUIRE(f.webview->has_call_containing("startup:state"));
     }
 
@@ -383,8 +255,6 @@ TEST_CASE("EventBridge | StartupManager event forwarding", "[bridge]") {
             attempts++;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
-
-        bridge.process_queue();
 
         REQUIRE(f.webview->has_call_containing("startup:step_started"));
         REQUIRE(f.webview->has_call_containing("my_test_step"));
@@ -411,8 +281,6 @@ TEST_CASE("EventBridge | StartupManager event forwarding", "[bridge]") {
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
-        bridge.process_queue();
-
         REQUIRE(f.webview->has_call_containing("startup:step_completed"));
     }
 
@@ -436,8 +304,6 @@ TEST_CASE("EventBridge | StartupManager event forwarding", "[bridge]") {
             attempts++;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
-
-        bridge.process_queue();
 
         REQUIRE(f.webview->has_call_containing("startup:completed"));
         REQUIRE(f.webview->has_call_containing("\"success\":true"));
@@ -469,8 +335,6 @@ TEST_CASE("EventBridge | StartupManager event forwarding", "[bridge]") {
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
-        bridge.process_queue();
-
         REQUIRE(f.webview->has_call_containing("startup:error"));
     }
 
@@ -494,8 +358,6 @@ TEST_CASE("EventBridge | StartupManager event forwarding", "[bridge]") {
             attempts++;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
-
-        bridge.process_queue();
 
         std::set<std::string> event_types;
         for (size_t i = 0; i < f.webview->call_count(); ++i) {
@@ -552,8 +414,6 @@ TEST_CASE("EventBridge | disconnect", "[bridge]") {
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
-        bridge.process_queue();
-
         REQUIRE(f.webview->call_count() == 0);
     }
 
@@ -592,8 +452,6 @@ TEST_CASE("EventBridge | disconnect", "[bridge]") {
             attempts++;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
-
-        bridge.process_queue();
 
         REQUIRE(f.webview->call_count() > 0);
     }

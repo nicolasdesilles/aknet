@@ -155,9 +155,6 @@ namespace aknet::startup {
             return progress_;
         }
 
-        // Preserve abort reason if already set (e.g., from request_abort() before run())
-        auto preserved_abort_reason = progress_.abort_reason;
-
         if (options.reset_progress_before_run) {
             rebuild_progress_snapshot(AppState::Booting);
         }
@@ -168,10 +165,8 @@ namespace aknet::startup {
         progress_.last_error.reset();
         progress_.can_retry = false;
         
-        // Restore abort reason if it was set before run()
-        if (preserved_abort_reason != AbortReason::None) {
-            progress_.abort_reason = preserved_abort_reason;
-        }
+        // Sync abort reason from atomic to progress snapshot
+        progress_.abort_reason = abort_reason_.load(std::memory_order_relaxed);
 
         if (abort_requested_) {
             // Ensure abort reason is set if not already
@@ -185,7 +180,8 @@ namespace aknet::startup {
         for (std::size_t i = 0; i < steps_.size(); ++i) {
 
             if (abort_requested_) {
-
+                // Sync abort reason from atomic to progress
+                progress_.abort_reason = abort_reason_.load(std::memory_order_relaxed);
                 // If abort reason is None, set it to UserRequested as default
                 if (progress_.abort_reason == AbortReason::None) {
                     progress_.abort_reason = AbortReason::UserRequested;
@@ -259,18 +255,21 @@ namespace aknet::startup {
     // Cancellation
 
     void StartupEngine::request_abort(AbortReason reason) {
+        abort_reason_.store(reason, std::memory_order_relaxed);
         abort_requested_.store(true, std::memory_order_relaxed);
-        progress_.abort_reason = reason;
     }
 
     void StartupEngine::reset_abort() {
         abort_requested_.store(false, std::memory_order_relaxed);
-        progress_.abort_reason = AbortReason::None;
+        abort_reason_.store(AbortReason::None, std::memory_order_relaxed);
     }
 
     // Accessors
 
     const SequenceProgress & StartupEngine::progress() const {
+        // Sync atomic abort_reason to progress snapshot before returning
+        const_cast<StartupEngine*>(this)->progress_.abort_reason = 
+            abort_reason_.load(std::memory_order_relaxed);
         return progress_;
     }
 
@@ -353,7 +352,8 @@ namespace aknet::startup {
 
         if (ctx.abort_requested()) {
             step_progress.status = StepStatus::Aborted;
-
+            // Sync abort reason from atomic to progress
+            progress_.abort_reason = abort_reason_.load(std::memory_order_relaxed);
             // If abort reason is None, set it to UserRequested as default
             if (progress_.abort_reason == AbortReason::None) {
                 progress_.abort_reason = AbortReason::UserRequested;

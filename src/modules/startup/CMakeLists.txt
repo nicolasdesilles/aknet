@@ -17,6 +17,7 @@ target_sources(aknet_startup
         include/startup_engine.h
         include/startup_manager.h
         include/startup_json.h
+        include/steps_definition.h
 )
 
 

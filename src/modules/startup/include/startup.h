@@ -23,11 +23,11 @@ namespace aknet::startup {
     enum class StepStatus { Pending, Running, Success, Failed, TimedOut, Skipped, Aborted };
 
     enum class AbortReason {
-        None,              ///< No abort requested
-        UserRequested,     ///< User clicked "Cancel" button
-        Timeout,           ///< Step exceeded its timeout (future use)
-        CriticalFailure,   ///< Critical step failed (future use)
-        SystemShutdown     ///< Application is shutting down
+        None,              // No abort requested
+        UserRequested,     // User clicked "Cancel" button
+        Timeout,           // Step exceeded its timeout (future use)
+        CriticalFailure,   // Critical step failed (future use)
+        SystemShutdown     // Application is shutting down
     };
 
     struct StepConfig {

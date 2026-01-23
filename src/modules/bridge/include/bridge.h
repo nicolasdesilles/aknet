@@ -43,19 +43,12 @@ namespace aknet::bridge {
         EventBridge(EventBridge&&) = delete;
         EventBridge& operator=(EventBridge&&) = delete;
 
-        void dispatch_to_ui(std::function<void()> task);
-        void process_queue();
-        size_t queue_size() const;
-
         void connect_startup_events(std::shared_ptr<startup::StartupManager> manager);
         void disconnect();
 
     private:
         std::shared_ptr<log::Logger> logger_;
         std::function<void(const std::string&)> execute_fn_;
-
-        mutable std::mutex queue_mutex_;
-        std::queue<std::function<void()>> task_queue_;
 
         // Store manager + listener IDs for cleanup
         std::shared_ptr<startup::StartupManager> connected_manager_;
