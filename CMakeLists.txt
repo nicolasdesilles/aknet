@@ -86,6 +86,10 @@ if(AKNET_BUILD_TESTS)
             ${AKNET_INTEGRATION_TEST_SOURCES}
     )
 
+    target_include_directories(aknet_all_tests PRIVATE
+            ${CMAKE_SOURCE_DIR}/src/modules/startup/tests/helpers
+    )
+
     target_link_libraries(aknet_all_tests
             PRIVATE
             aknet_core
