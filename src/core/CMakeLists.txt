@@ -19,11 +19,17 @@ target_include_directories(aknet_core
         $<INSTALL_INTERFACE:include>
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/startup_steps
 )
 
 # External dependencies
-target_link_libraries(aknet_core PUBLIC aknet_logger)
-target_link_libraries(aknet_core PUBLIC aknet_settings)
+target_link_libraries(aknet_core PUBLIC
+        aknet_logger
+        aknet_settings
+        aknet_startup
+        aknet_bridge
+        saucer::saucer
+)
 
 
 

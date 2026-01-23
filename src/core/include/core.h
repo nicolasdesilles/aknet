@@ -13,6 +13,14 @@
 // aknet utils and modules
 #include <logger.h>
 #include <settings.h>
+#include <startup_manager.h>
+
+// Saucer webview
+#include <saucer/smartview.hpp>
+
+namespace aknet::bridge {
+    class EventBridge;
+}
 
 namespace aknet {
 
@@ -35,18 +43,34 @@ namespace aknet {
 
         void test_function();
 
-        // Future: accessors for owned modules
-        // ModuleA& module_a();
+        // Accessors for owned modules
+        startup::StartupManager& startup_manager() { return *startup_manager_; }
+        const startup::StartupManager& startup_manager() const { return *startup_manager_; }
 
-        settings::Settings settings_;
+        template<typename WebviewT>
+        void init_bridge(WebviewT* webview);
+
+        // Startup control (exposed to UI)
+        bool start_startup();
+        void abort_startup();
+        bool retry_startup();
+        void set_test_mode(int mode);  // 0=normal, 1=with_failure, 2=with_timeout
+
+        // Settings accessor
+        settings::Settings& settings() { return settings_; }
+        const settings::Settings& settings() const { return settings_; }
 
     private:
         std::shared_ptr<log::Logger> logger_;
 
         void log_aknet_start_message();
 
-        // Future: owned modules
-        // std::unique_ptr<ModuleA> module_a_;
+        // Settings system
+        settings::Settings settings_;
+
+        // Owned modules
+        std::unique_ptr<startup::StartupManager> startup_manager_;
+        std::unique_ptr<bridge::EventBridge> bridge_;
     };
 
 } // namespace aknet

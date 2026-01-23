@@ -9,14 +9,34 @@ namespace {
 coco::stray start(saucer::application* app)
 {
     auto window  = saucer::window::create(app).value();
-    auto webview = saucer::smartview<>::create({.window = window});
+    auto webview = saucer::smartview<>::create({.window = window}).value();
 
     window->set_title("aknet");
 
-    webview->expose("log_test_msg", []() { g_core->test_function(); });
+    // Initialize the UI bridge
+    g_core->init_bridge(&webview);
 
-    webview->embed(saucer::embedded::all());
-    webview->serve("/index.html");
+    webview.expose("log_test_msg", []() { g_core->test_function(); });
+
+    // Startup control functions
+    webview.expose("start_startup", []() -> bool { 
+        return g_core->start_startup(); 
+    });
+
+    webview.expose("abort_startup", []() { 
+        g_core->abort_startup(); 
+    });
+
+    webview.expose("retry_startup", []() -> bool { 
+        return g_core->retry_startup(); 
+    });
+
+    webview.expose("set_test_mode", [](int mode) { 
+        g_core->set_test_mode(mode); 
+    });
+
+    webview.embed(saucer::embedded::all());
+    webview.serve("/index.html");
     window->show();
 
     // temp Test function

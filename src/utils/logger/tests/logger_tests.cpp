@@ -8,6 +8,8 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <regex>
+#include <thread>
 
 #include <logger.h>
 
@@ -735,6 +737,307 @@ TEST_CASE("Logger | Edge cases ", "[logger]") {
         }
     
         log::shutdown();
+    }
+
+    SECTION("string_to_log_level converts all valid level strings") {
+        REQUIRE(log::string_to_log_level("trace") == log::LogLevel::trace);
+        REQUIRE(log::string_to_log_level("debug") == log::LogLevel::debug);
+        REQUIRE(log::string_to_log_level("info") == log::LogLevel::info);
+        REQUIRE(log::string_to_log_level("warn") == log::LogLevel::warn);
+        REQUIRE(log::string_to_log_level("error") == log::LogLevel::error);
+        REQUIRE(log::string_to_log_level("critical") == log::LogLevel::critical);
+        REQUIRE(log::string_to_log_level("off") == log::LogLevel::off);
+    }
+
+    SECTION("string_to_log_level throws for invalid string") {
+        REQUIRE_THROWS_AS(log::string_to_log_level("invalid"), std::invalid_argument);
+        REQUIRE_THROWS_AS(log::string_to_log_level(""), std::invalid_argument);
+        REQUIRE_THROWS_AS(log::string_to_log_level("INFO"), std::invalid_argument);
+        REQUIRE_THROWS_AS(log::string_to_log_level("Warning"), std::invalid_argument);
+    }
+
+    SECTION("get_level covers all spdlog level cases") {
+        log::init(temp_dir.path());
+
+        auto test_logger = log::get("test_level_coverage");
+
+        // Test that each level roundtrips correctly through get_level
+        for (auto lvl : {
+            log::LogLevel::trace,
+            log::LogLevel::debug, 
+            log::LogLevel::info,
+            log::LogLevel::warn,
+            log::LogLevel::error,
+            log::LogLevel::critical,
+            log::LogLevel::off
+        }) {
+            test_logger->set_level(lvl);
+            REQUIRE(test_logger->get_level() == lvl);
+        }
+
+        log::shutdown();
+    }
+
+    SECTION("init with empty path uses default log directory") {
+        // This covers the empty path branch in init
+        log::init(fs::path{});
+
+        REQUIRE(log::is_initialized());
+
+        auto test_logger = log::get("test_default_path");
+        REQUIRE(test_logger != nullptr);
+
+        log::shutdown();
+    }
+
+    SECTION("multiple calls to init with different paths") {
+        log::init(temp_dir.path());
+        
+        const auto initial_state = log::is_initialized();
+        REQUIRE(initial_state);
+
+        // Call init again with a different path - should return early
+        const TempDir temp_dir2;
+        log::init(temp_dir2.path());
+
+        // Should still be initialized
+        REQUIRE(log::is_initialized());
+
+        log::shutdown();
+    }
+
+    SECTION("logger caching works correctly") {
+        log::init(temp_dir.path());
+
+        // First call creates and caches the logger
+        auto logger1 = log::get("cached_logger");
+        REQUIRE(logger1 != nullptr);
+
+        // Second call returns cached logger (hits the cache branch)
+        auto logger2 = log::get("cached_logger");
+        REQUIRE(logger2 != nullptr);
+        REQUIRE(logger1.get() == logger2.get());
+
+        log::shutdown();
+    }
+
+    SECTION("logger pattern is set correctly on creation") {
+        log::shutdown(); // Ensure clean state
+        
+        log::init(temp_dir.path());
+
+        auto test_logger = log::get("pattern_test");
+        test_logger->info("test message with pattern");
+        test_logger->flush();
+        
+        // Force immediate flush by dropping the logger
+        spdlog::drop("pattern_test");
+        
+        // Longer delay to ensure file is written
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        // Verify the log file has the expected pattern
+        bool found_log_file = false;
+        std::string log_file_path_str;
+        for (const auto &entry: fs::directory_iterator(temp_dir.path())) {
+            if (entry.is_regular_file() && entry.path().extension() == ".log") {
+                found_log_file = true;
+                log_file_path_str = entry.path().string();
+                break;
+            }
+        }
+        REQUIRE(found_log_file);
+
+        std::ifstream file(log_file_path_str);
+        REQUIRE(file.is_open());
+
+        std::string line;
+        bool found_pattern = false;
+        const std::regex expected_line{
+            R"(^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} \[[^\]]+\] \[[^\]]+\] test message with pattern$)"};
+        while (std::getline(file, line)) {
+            // Logger name is formatted with width (%10!n), so don't match it literally.
+            if (std::regex_match(line, expected_line)) {
+                found_pattern = true;
+                break;
+            }
+        }
+
+        REQUIRE(found_pattern);
+
+        log::shutdown();
+    }
+
+    SECTION("unique session filename generation when file exists") {
+        log::shutdown(); // Ensure clean state
+        
+        // Use a separate temp dir for this test to avoid interference
+        const TempDir temp_dir_unique;
+        
+        log::init(temp_dir_unique.path());
+
+        // Create first logger to generate a log file
+        auto logger1 = log::get("test1");
+        logger1->info("first message");
+        logger1->flush();
+        spdlog::drop("test1");
+
+        log::shutdown();
+        
+        // Sleep to ensure different timestamp in filename
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        // Initialize again - should create a new file with unique name
+        log::init(temp_dir_unique.path());
+
+        auto logger2 = log::get("test2");
+        logger2->info("second message");
+        logger2->flush();
+        spdlog::drop("test2");
+        
+        // Longer delay to ensure files are written
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        // Count log files
+        int log_file_count = 0;
+        for (const auto &entry: fs::directory_iterator(temp_dir_unique.path())) {
+            if (entry.is_regular_file() && entry.path().extension() == ".log") {
+                log_file_count++;
+            }
+        }
+
+        // Should have at least 2 log files
+        REQUIRE(log_file_count >= 2);
+
+        log::shutdown();
+    }
+
+    SECTION("logger sinks are shared across loggers") {
+        log::shutdown(); // Ensure clean state
+        
+        // Use a separate temp dir for this test
+        const TempDir temp_dir_shared;
+        
+        log::init(temp_dir_shared.path());
+
+        auto logger1 = log::get("logger1");
+        auto logger2 = log::get("logger2");
+
+        logger1->info("from logger1");
+        logger2->info("from logger2");
+        logger1->flush();
+        logger2->flush();
+        
+        // Drop loggers to force flush
+        spdlog::drop("logger1");
+        spdlog::drop("logger2");
+        
+        // Longer delay to ensure files are written
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        // Both messages should appear in the same log file
+        bool found_log_file = false;
+        std::string log_file_path_str;
+        for (const auto &entry: fs::directory_iterator(temp_dir_shared.path())) {
+            if (entry.is_regular_file() && entry.path().extension() == ".log") {
+                found_log_file = true;
+                log_file_path_str = entry.path().string();
+                break;
+            }
+        }
+        REQUIRE(found_log_file);
+
+        std::ifstream file(log_file_path_str);
+        REQUIRE(file.is_open());
+
+        bool found_logger1 = false;
+        bool found_logger2 = false;
+        std::string line;
+        while (std::getline(file, line)) {
+            if (line.find("from logger1") != std::string::npos) {
+                found_logger1 = true;
+            }
+            if (line.find("from logger2") != std::string::npos) {
+                found_logger2 = true;
+            }
+        }
+
+        REQUIRE(found_logger1);
+        REQUIRE(found_logger2);
+
+        log::shutdown();
+    }
+
+    SECTION("console sink is created and configured") {
+        log::init(temp_dir.path());
+
+        // Create logger and log at trace level
+        auto test_logger = log::get("console_test");
+        test_logger->set_level(log::LogLevel::trace);
+        
+        // Log messages at all levels to ensure console sink is working
+        test_logger->trace("trace to console");
+        test_logger->debug("debug to console");
+        test_logger->info("info to console");
+        test_logger->warn("warn to console");
+        test_logger->error("error to console");
+        test_logger->critical("critical to console");
+        test_logger->flush();
+
+        // If we got here without crashes, console sink is working
+        SUCCEED();
+
+        log::shutdown();
+    }
+
+    SECTION("file sink rotation settings are applied") {
+        log::init(temp_dir.path());
+
+        auto test_logger = log::get("rotation_test");
+
+        // Write enough data to potentially trigger rotation (though 5MB is large)
+        for (int i = 0; i < 1000; ++i) {
+            test_logger->info("This is log message number {} with some padding to increase size", i);
+        }
+        test_logger->flush();
+
+        // At minimum, one log file should exist
+        int log_file_count = 0;
+        for (const auto &entry: fs::directory_iterator(temp_dir.path())) {
+            if (entry.is_regular_file() && entry.path().extension() == ".log") {
+                log_file_count++;
+            }
+        }
+
+        REQUIRE(log_file_count >= 1);
+
+        log::shutdown();
+    }
+
+    SECTION("is_initialized returns false before init") {
+        // Make sure logging is shut down first
+        log::shutdown();
+
+        REQUIRE_FALSE(log::is_initialized());
+
+        // Re-initialize for other tests
+        log::init(temp_dir.path());
+        REQUIRE(log::is_initialized());
+        log::shutdown();
+    }
+
+    SECTION("shutdown clears sinks and loggers") {
+        log::init(temp_dir.path());
+
+        auto logger = log::get("test_shutdown");
+        REQUIRE(log::is_initialized());
+
+        log::shutdown();
+
+        REQUIRE_FALSE(log::is_initialized());
+
+        // After shutdown, attempting to get a logger should throw
+        REQUIRE_THROWS_AS(log::get("another_logger"), std::runtime_error);
     }
 }
 

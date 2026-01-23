@@ -51,6 +51,8 @@ option(AKNET_BUILD_TESTS "Build unit tests" ON)
 add_subdirectory(src/core)
 
 # Modules
+add_subdirectory(src/modules/startup)
+add_subdirectory(src/modules/bridge)
 
 # Utils
 add_subdirectory(src/utils/logger)
@@ -66,6 +68,8 @@ add_subdirectory(src/utils/settings)
 if(AKNET_BUILD_TESTS)
     # Module tests
     add_subdirectory(src/core/tests)
+    add_subdirectory(src/modules/startup/tests)
+    add_subdirectory(src/modules/bridge/tests)
     add_subdirectory(src/utils/logger/tests)
     add_subdirectory(src/utils/settings/tests)
 
@@ -76,8 +80,14 @@ if(AKNET_BUILD_TESTS)
     add_executable(aknet_all_tests
             ${AKNET_LOGGER_TEST_SOURCES}
             ${AKNET_SETTINGS_TEST_SOURCES}
+            ${AKNET_STARTUP_TEST_SOURCES}
+            ${AKNET_BRIDGE_TEST_SOURCES}
             ${AKNET_CORE_TEST_SOURCES}
             ${AKNET_INTEGRATION_TEST_SOURCES}
+    )
+
+    target_include_directories(aknet_all_tests PRIVATE
+            ${CMAKE_SOURCE_DIR}/src/modules/startup/tests/helpers
     )
 
     target_link_libraries(aknet_all_tests
@@ -85,6 +95,8 @@ if(AKNET_BUILD_TESTS)
             aknet_core
             aknet_logger
             aknet_settings
+            aknet_startup
+            aknet_bridge
             nlohmann_json::nlohmann_json
             Catch2::Catch2WithMain
     )
@@ -107,11 +119,14 @@ if(APPLE)
     target_link_libraries(aknet
             PRIVATE
             aknet_core
+            aknet_startup
             aknet_logger
             aknet_settings
             saucer::saucer
             saucer::embedded
     )
+
+    target_include_directories(aknet PRIVATE ${CMAKE_SOURCE_DIR}/src/startup_steps)
 
     target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
     set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 23 CXX_EXTENSIONS OFF CXX_STANDARD_REQUIRED ON)
