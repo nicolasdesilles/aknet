@@ -211,8 +211,6 @@ namespace aknet::startup {
             return {false, std::string("JSON type error: ") + e.what()};
         } catch (const nlohmann::json::out_of_range& e) {
             return {false, std::string("JSON missing field: ") + e.what()};
-        } catch (const std::exception& e) {
-            return {false, std::string("Unexpected error: ") + e.what()};
         }
     }
 
@@ -227,8 +225,6 @@ namespace aknet::startup {
             return {false, std::string("JSON type error: ") + e.what()};
         } catch (const nlohmann::json::out_of_range& e) {
             return {false, std::string("JSON missing field: ") + e.what()};
-        } catch (const std::exception& e) {
-            return {false, std::string("Unexpected error: ") + e.what()};
         }
     }
 
@@ -243,8 +239,6 @@ namespace aknet::startup {
             return {false, std::string("JSON type error: ") + e.what()};
         } catch (const nlohmann::json::out_of_range& e) {
             return {false, std::string("JSON missing field: ") + e.what()};
-        } catch (const std::exception& e) {
-            return {false, std::string("Unexpected error: ") + e.what()};
         }
     }
 

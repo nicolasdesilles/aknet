@@ -645,6 +645,66 @@ TEST_CASE("Startup | Abort and cancellation", "[startup][engine][abort]") {
         REQUIRE(progress.last_error.has_value());
         REQUIRE(progress.last_error.value().find("aborted") != std::string::npos);
     }
+
+    SECTION("abort requested between steps marks all remaining as aborted") {
+        EngineTestFixture f;
+        startup::StartupEngine engine(f.logger_startup, f.settings, f.clock);
+
+        // Counter to track how many steps have run
+        int steps_run = 0;
+
+        // Step that doesn't check abort flag, completes successfully
+        class SimpleStep : public startup::IStartupStep {
+            startup::StepConfig config_;
+            int& counter_;
+        public:
+            SimpleStep(startup::StepConfig config, int& counter)
+                : config_(std::move(config)), counter_(counter) {}
+            const startup::StepConfig& config() const override { return config_; }
+            startup::StepResult run(startup::StepContext&) override {
+                counter_++;
+                return {startup::StepStatus::Success, "OK"};
+            }
+        };
+
+        std::vector<startup::StartupEngine::StepPtr> steps;
+        steps.push_back(std::make_unique<SimpleStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            steps_run
+        ));
+        steps.push_back(std::make_unique<SimpleStep>(
+            startup::StepConfig{.id = "step2", .display_name = "Step 2", .timeout = std::chrono::seconds{5}},
+            steps_run
+        ));
+        steps.push_back(std::make_unique<SimpleStep>(
+            startup::StepConfig{.id = "step3", .display_name = "Step 3", .timeout = std::chrono::seconds{5}},
+            steps_run
+        ));
+
+        engine.set_steps(std::move(steps));
+
+        // Use progress callback to trigger abort after first step
+        int progress_callback_count = 0;
+        const auto& progress = engine.run({
+            .progress_callback = [&](const startup::SequenceProgress& p) {
+                progress_callback_count++;
+                // After first step completes, request abort
+                if (progress_callback_count == 1 && p.steps[0].status == startup::StepStatus::Success) {
+                    engine.request_abort(startup::AbortReason::UserRequested);
+                }
+            }
+        });
+
+        // First step completed successfully, then abort was detected between steps
+        REQUIRE(progress.state == startup::AppState::Off);
+        REQUIRE(steps_run == 1);  // Only first step actually ran
+        REQUIRE(progress.steps[0].status == startup::StepStatus::Success);
+        REQUIRE(progress.steps[1].status == startup::StepStatus::Aborted);
+        REQUIRE(progress.steps[2].status == startup::StepStatus::Aborted);
+        REQUIRE(progress.abort_reason == startup::AbortReason::UserRequested);
+        REQUIRE(progress.last_error.has_value());
+        REQUIRE(progress.last_error.value().find("aborted") != std::string::npos);
+    }
 }
 
 TEST_CASE("Startup | Run options and re-execution", "[startup][engine]") {

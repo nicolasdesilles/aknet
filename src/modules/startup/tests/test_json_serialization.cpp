@@ -766,4 +766,94 @@ TEST_CASE("Startup | JSON - High-level deserialization helpers", "[startup][json
         REQUIRE(restored.current_step_index == original.current_step_index);
         REQUIRE(restored.can_retry == original.can_retry);
     }
+
+    SECTION("deserialize_progress returns type_error on wrong field type") {
+        // state should be int, not string
+        std::string json_str = R"({
+            "state": "invalid",
+            "current_step_index": 0,
+            "steps": [],
+            "last_error": null,
+            "can_retry": false,
+            "abort_reason": 0
+        })";
+        SequenceProgress progress;
+
+        auto parse_result = deserialize_progress(json_str, progress);
+
+        REQUIRE(parse_result.ok == false);
+        REQUIRE(parse_result.error.find("type error") != std::string::npos);
+    }
+
+    SECTION("deserialize_progress returns out_of_range on missing field") {
+        // Missing "state" field
+        std::string json_str = R"({
+            "current_step_index": 0,
+            "steps": [],
+            "last_error": null,
+            "can_retry": false,
+            "abort_reason": 0
+        })";
+        SequenceProgress progress;
+
+        auto parse_result = deserialize_progress(json_str, progress);
+
+        REQUIRE(parse_result.ok == false);
+        REQUIRE(parse_result.error.find("missing field") != std::string::npos);
+    }
+
+    SECTION("deserialize_result returns type_error on wrong field type") {
+        // ok should be bool, not string
+        std::string json_str = R"({"ok": "not_a_bool", "error": ""})";
+        Result result;
+
+        auto parse_result = deserialize_result(json_str, result);
+
+        REQUIRE(parse_result.ok == false);
+        REQUIRE(parse_result.error.find("type error") != std::string::npos);
+    }
+
+    SECTION("deserialize_result returns out_of_range on missing field") {
+        // Missing "error" field
+        std::string json_str = R"({"ok": true})";
+        Result result;
+
+        auto parse_result = deserialize_result(json_str, result);
+
+        REQUIRE(parse_result.ok == false);
+        REQUIRE(parse_result.error.find("missing field") != std::string::npos);
+    }
+
+    SECTION("deserialize_step_config returns type_error on wrong field type") {
+        // timeout should be int, not string
+        std::string json_str = R"({
+            "id": "test",
+            "display_name": "Test Step",
+            "timeout": "not_a_number",
+            "critical": true,
+            "can_skip": false
+        })";
+        StepConfig config;
+
+        auto parse_result = deserialize_step_config(json_str, config);
+
+        REQUIRE(parse_result.ok == false);
+        REQUIRE(parse_result.error.find("type error") != std::string::npos);
+    }
+
+    SECTION("deserialize_step_config returns out_of_range on missing field") {
+        // Missing "id" field
+        std::string json_str = R"({
+            "display_name": "Test Step",
+            "timeout": 30,
+            "critical": true,
+            "can_skip": false
+        })";
+        StepConfig config;
+
+        auto parse_result = deserialize_step_config(json_str, config);
+
+        REQUIRE(parse_result.ok == false);
+        REQUIRE(parse_result.error.find("missing field") != std::string::npos);
+    }
 }

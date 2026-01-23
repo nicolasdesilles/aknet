@@ -37,17 +37,13 @@ namespace aknet::bridge {
         listener_ids_.push_back(
             manager->events().get<Event::ProgressChanged>()
                 .add([this](const SequenceProgress& progress) {
-                    try {
-                        json j_progress = progress;
-                        std::string js = std::format(
-                            "window.dispatchEvent(new CustomEvent('startup:progress', "
-                            "{{detail: {}}}));",
-                            j_progress.dump()
-                        );
-                        execute_fn_(js);
-                    } catch (const std::exception& e) {
-                        logger_->error("Failed to dispatch ProgressChanged: {}", e.what());
-                    }
+                    json j_progress = progress;
+                    std::string js = std::format(
+                        "window.dispatchEvent(new CustomEvent('startup:progress', "
+                        "{{detail: {}}}));",
+                        j_progress.dump()
+                    );
+                    execute_fn_(js);
                 })
         );
 
@@ -55,20 +51,16 @@ namespace aknet::bridge {
         listener_ids_.push_back(
             manager->events().get<Event::StateChanged>()
                 .add([this](AppState old_state, AppState new_state) {
-                    try {
-                        json j = {
-                            {"old_state", static_cast<int>(old_state)},
-                            {"new_state", static_cast<int>(new_state)}
-                        };
-                        std::string js = std::format(
-                            "window.dispatchEvent(new CustomEvent('startup:state', "
-                            "{{detail: {}}}));",
-                            j.dump()
-                        );
-                        execute_fn_(js);
-                    } catch (const std::exception& e) {
-                        logger_->error("Failed to dispatch StateChanged: {}", e.what());
-                    }
+                    json j = {
+                        {"old_state", static_cast<int>(old_state)},
+                        {"new_state", static_cast<int>(new_state)}
+                    };
+                    std::string js = std::format(
+                        "window.dispatchEvent(new CustomEvent('startup:state', "
+                        "{{detail: {}}}));",
+                        j.dump()
+                    );
+                    execute_fn_(js);
                 })
         );
 
@@ -76,17 +68,13 @@ namespace aknet::bridge {
         listener_ids_.push_back(
             manager->events().get<Event::StepStarted>()
                 .add([this](int index, const std::string& id) {
-                    try {
-                        json j = {{"index", index}, {"id", id}};
-                        std::string js = std::format(
-                            "window.dispatchEvent(new CustomEvent('startup:step_started', "
-                            "{{detail: {}}}));",
-                            j.dump()
-                        );
-                        execute_fn_(js);
-                    } catch (const std::exception& e) {
-                        logger_->error("Failed to dispatch StepStarted: {}", e.what());
-                    }
+                    json j = {{"index", index}, {"id", id}};
+                    std::string js = std::format(
+                        "window.dispatchEvent(new CustomEvent('startup:step_started', "
+                        "{{detail: {}}}));",
+                        j.dump()
+                    );
+                    execute_fn_(js);
                 })
         );
 
@@ -94,21 +82,17 @@ namespace aknet::bridge {
         listener_ids_.push_back(
             manager->events().get<Event::StepCompleted>()
                 .add([this](int index, const std::string& id, StepStatus status) {
-                    try {
-                        json j = {
-                            {"index", index},
-                            {"id", id},
-                            {"status", static_cast<int>(status)}
-                        };
-                        std::string js = std::format(
-                            "window.dispatchEvent(new CustomEvent('startup:step_completed', "
-                            "{{detail: {}}}));",
-                            j.dump()
-                        );
-                        execute_fn_(js);
-                    } catch (const std::exception& e) {
-                        logger_->error("Failed to dispatch StepCompleted: {}", e.what());
-                    }
+                    json j = {
+                        {"index", index},
+                        {"id", id},
+                        {"status", static_cast<int>(status)}
+                    };
+                    std::string js = std::format(
+                        "window.dispatchEvent(new CustomEvent('startup:step_completed', "
+                        "{{detail: {}}}));",
+                        j.dump()
+                    );
+                    execute_fn_(js);
                 })
         );
 
@@ -116,17 +100,13 @@ namespace aknet::bridge {
         listener_ids_.push_back(
             manager->events().get<Event::SequenceCompleted>()
                 .add([this](bool success, const std::string& error_msg) {
-                    try {
-                        json j = {{"success", success}, {"error", error_msg}};
-                        std::string js = std::format(
-                            "window.dispatchEvent(new CustomEvent('startup:completed', "
-                            "{{detail: {}}}));",
-                            j.dump()
-                        );
-                        execute_fn_(js);
-                    } catch (const std::exception& e) {
-                        logger_->error("Failed to dispatch SequenceCompleted: {}", e.what());
-                    }
+                    json j = {{"success", success}, {"error", error_msg}};
+                    std::string js = std::format(
+                        "window.dispatchEvent(new CustomEvent('startup:completed', "
+                        "{{detail: {}}}));",
+                        j.dump()
+                    );
+                    execute_fn_(js);
                 })
         );
 
@@ -134,17 +114,13 @@ namespace aknet::bridge {
         listener_ids_.push_back(
             manager->events().get<Event::Error>()
                 .add([this](const std::string& message) {
-                    try {
-                        json j = {{"message", message}};
-                        std::string js = std::format(
-                            "window.dispatchEvent(new CustomEvent('startup:error', "
-                            "{{detail: {}}}));",
-                            j.dump()
-                        );
-                        execute_fn_(js);
-                    } catch (const std::exception& e) {
-                        logger_->error("Failed to dispatch Error: {}", e.what());
-                    }
+                    json j = {{"message", message}};
+                    std::string js = std::format(
+                        "window.dispatchEvent(new CustomEvent('startup:error', "
+                        "{{detail: {}}}));",
+                        j.dump()
+                    );
+                    execute_fn_(js);
                 })
         );
     }

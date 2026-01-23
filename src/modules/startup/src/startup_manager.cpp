@@ -184,12 +184,7 @@ namespace aknet::startup {
                 break;
             }
 
-            // Check if we should run
-            if (!should_run_.load(std::memory_order_acquire)) {
-                continue;
-            }
-
-            // Clear run signal
+            // Clear run signal (should_run_ is guaranteed to be true here)
             should_run_.store(false, std::memory_order_release);
 
             // Check if we should retry or run fresh (while holding lock)

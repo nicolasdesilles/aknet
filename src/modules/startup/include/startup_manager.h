@@ -93,7 +93,6 @@ namespace aknet::startup {
 
         // Get the event manager to subscribe to events
         Events& events() { return events_; }
-        const Events& events() const { return events_; }
 
 
     private:

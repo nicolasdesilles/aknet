@@ -397,4 +397,107 @@ TEST_CASE("Startup | StartupManager - Edge cases", "[startup][manager]") {
         REQUIRE(progress.steps.empty());
     }
 
+    SECTION("retry_async fails when can_retry is false") {
+        EngineTestFixture f;
+        auto real_clock = std::make_shared<startup::SteadyClock>();
+        startup::StartupManager manager(f.logger_startup, f.settings, real_clock);
+
+        // Add step and run successfully
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "step1", .display_name = "Step 1", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+        manager.set_steps(std::move(steps));
+        manager.start_async();
+
+        // Wait for completion
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+        // After success, can_retry should be false
+        REQUIRE_FALSE(manager.can_retry());
+
+        // Try to retry - should fail
+        auto result = manager.retry_async();
+        REQUIRE_FALSE(result.ok);
+        REQUIRE_FALSE(result.error.empty());
+    }
+
+    SECTION("set_steps fails when sequence is running") {
+        EngineTestFixture f;
+        auto real_clock = std::make_shared<startup::SteadyClock>();
+        startup::StartupManager manager(f.logger_startup, f.settings, real_clock);
+
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<SlowRealStep>(
+            startup::StepConfig{.id = "slow", .display_name = "Slow", .timeout = std::chrono::seconds{5}}
+        ));
+        manager.set_steps(std::move(steps));
+        manager.start_async();
+
+        // Wait a bit to ensure it's running
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+        // Try to set_steps while running
+        std::vector<startup::StartupManager::StepPtr> new_steps;
+        new_steps.push_back(std::make_unique<FakeStep>(
+            startup::StepConfig{.id = "new", .display_name = "New", .timeout = std::chrono::seconds{5}},
+            startup::StepResult{startup::StepStatus::Success, "OK"}
+        ));
+
+        auto result = manager.set_steps(std::move(new_steps));
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.find("running") != std::string::npos);
+
+        // Wait for completion
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+    }
+
+    SECTION("clear_steps does nothing when sequence is running") {
+        EngineTestFixture f;
+        auto real_clock = std::make_shared<startup::SteadyClock>();
+        startup::StartupManager manager(f.logger_startup, f.settings, real_clock);
+
+        std::vector<startup::StartupManager::StepPtr> steps;
+        steps.push_back(std::make_unique<SlowRealStep>(
+            startup::StepConfig{.id = "slow", .display_name = "Slow", .timeout = std::chrono::seconds{5}}
+        ));
+        manager.set_steps(std::move(steps));
+
+        // Get initial progress to verify steps are set
+        auto initial_progress = manager.get_progress();
+        REQUIRE(initial_progress.steps.size() == 1);
+
+        manager.start_async();
+
+        // Wait a bit to ensure it's running
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        REQUIRE(manager.is_running());
+
+        // Try to clear_steps while running - should be ignored
+        manager.clear_steps();
+
+        // Wait for completion
+        int attempts = 0;
+        while (manager.is_running() && attempts < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            attempts++;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+        // Steps should still be there (clear was ignored)
+        auto final_progress = manager.get_progress();
+        REQUIRE(final_progress.steps.size() == 1);
+        REQUIRE(final_progress.state == startup::AppState::Active);
+    }
+
 }

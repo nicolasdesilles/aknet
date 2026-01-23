@@ -169,10 +169,6 @@ namespace aknet::startup {
         progress_.abort_reason = abort_reason_.load(std::memory_order_relaxed);
 
         if (abort_requested_) {
-            // Ensure abort reason is set if not already
-            if (progress_.abort_reason == AbortReason::None) {
-                progress_.abort_reason = AbortReason::UserRequested;
-            }
             transition_to_off_with_error("Startup aborted", false);
             return progress_;
         }
@@ -182,10 +178,6 @@ namespace aknet::startup {
             if (abort_requested_) {
                 // Sync abort reason from atomic to progress
                 progress_.abort_reason = abort_reason_.load(std::memory_order_relaxed);
-                // If abort reason is None, set it to UserRequested as default
-                if (progress_.abort_reason == AbortReason::None) {
-                    progress_.abort_reason = AbortReason::UserRequested;
-                }
 
                 // Mark all steps as aborted
                 for (std::size_t j = i; j < progress_.steps.size(); ++j) {
@@ -354,10 +346,6 @@ namespace aknet::startup {
             step_progress.status = StepStatus::Aborted;
             // Sync abort reason from atomic to progress
             progress_.abort_reason = abort_reason_.load(std::memory_order_relaxed);
-            // If abort reason is None, set it to UserRequested as default
-            if (progress_.abort_reason == AbortReason::None) {
-                progress_.abort_reason = AbortReason::UserRequested;
-            }
 
             // Mark all remaining steps as aborted
             for (std::size_t j = index + 1; j < progress_.steps.size(); ++j) {
