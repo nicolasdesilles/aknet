@@ -1,0 +1,4 @@
+title: Log
+nav:
+  - index.md
+  - ...  # Auto-discover all log pages

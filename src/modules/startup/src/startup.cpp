@@ -4,7 +4,7 @@
 
 #include "startup.h"
 
-namespace aknet::startup {
+namespace aknet::startup::types {
 
     // -------------------------------------------------------------------------
     // Helpers

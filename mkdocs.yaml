@@ -1,0 +1,59 @@
+site_name: aknet docs
+site_description: Documentation for aknet - AES67 Virtual Soundcard
+
+# Navigation is managed by awesome-pages plugin using .pages files
+# See docs/.pages for top-level ordering
+# Each subfolder can have its own .pages file for local ordering
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  features:
+    - navigation.indexes     # Section index pages (index.md as section page)
+    - navigation.sections    # Top-level as groups in sidebar
+    - navigation.path        # Breadcrumbs
+    - toc.follow             # TOC follows scroll
+    - navigation.top         # Back to top button
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: blue grey
+      accent: blue grey
+      toggle:
+        icon: material/brightness-7 
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: blue grey
+      accent: blue grey
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - def_list
+  - attr_list
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+plugins:
+  - search
+  - awesome-pages
+extra_css:
+  - stylesheets/doxide.css
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+  - https://cdn.jsdelivr.net/npm/tablesort@5.3.0/src/tablesort.min.js
+  - https://cdn.jsdelivr.net/npm/tablesort@5.3.0/src/sorts/tablesort.number.js
+  - javascripts/tablesort.js

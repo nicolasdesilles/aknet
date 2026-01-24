@@ -1,0 +1,7 @@
+title: Guides
+nav:
+  - index.md
+  - Core Module: core-module.md
+  - Bridge Module: bridge-module.md
+  - Startup Module: startup-module.md
+  - ...  # Auto-discover any new guides

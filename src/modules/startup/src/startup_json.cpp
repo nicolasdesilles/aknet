@@ -5,10 +5,10 @@
 #include "startup_json.h"
 #include <chrono>
 
-namespace aknet::startup {
+namespace aknet::startup::types {
 
     // -------------------------------------------------------------------------
-    // Enum Serialization
+    // Enum Serialization (ADL-compatible)
     // -------------------------------------------------------------------------
 
     void to_json(nlohmann::json& j, AppState state) {
@@ -57,7 +57,7 @@ namespace aknet::startup {
     }
 
     // -------------------------------------------------------------------------
-    // Struct Serialization
+    // Struct Serialization (ADL-compatible)
     // -------------------------------------------------------------------------
 
     void to_json(nlohmann::json& j, const StepConfig& config) {
@@ -181,6 +181,14 @@ namespace aknet::startup {
         j.at("error").get_to(result.error);
     }
 
+} // namespace aknet::startup::types
+
+namespace aknet::startup::json {
+
+    using types::SequenceProgress;
+    using types::Result;
+    using types::StepConfig;
+
     // -------------------------------------------------------------------------
     // Helper Functions
     // -------------------------------------------------------------------------
@@ -242,4 +250,4 @@ namespace aknet::startup {
         }
     }
 
-} // namespace aknet::startup
+} // namespace aknet::startup::json

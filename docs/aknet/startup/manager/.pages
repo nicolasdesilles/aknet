@@ -1,0 +1,4 @@
+title: Manager
+nav:
+  - index.md
+  - ...  # Auto-discover all manager pages
