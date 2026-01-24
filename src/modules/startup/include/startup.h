@@ -18,16 +18,35 @@ namespace aknet::startup {
     // Data structs definitions
     // -------------------------------------------------------------------------
 
-    enum class AppState { Off, Booting, Active, ShuttingDown };
+    /**
+     * State of the application
+     */
+    enum class AppState {
+        Off,          ///< "Idle" state, default when starting the app
+        Booting,      ///< When the startup process is running
+        Active,       ///< When the app is fully active (audio engine active, networking, etc)
+        ShuttingDown  ///< When the app is shutting down
+    };
 
-    enum class StepStatus { Pending, Running, Success, Failed, TimedOut, Skipped, Aborted };
+    /**
+     * Status of a step in the startup process
+     */
+    enum class StepStatus {
+        Pending,   ///< The step is yet to be started
+        Running,   ///< The step is in progress
+        Success,   ///< The step is finished, and was a success
+        Failed,    ///< The step is finished, and failed
+        TimedOut,  ///< The step has timed out (execution time exceeded the step timeout value)
+        Skipped,   ///< The step was skipped
+        Aborted    ///< The step was aborted (when the whole startup process is stopped)
+    };
 
     enum class AbortReason {
-        None,              // No abort requested
-        UserRequested,     // User clicked "Cancel" button
-        Timeout,           // Step exceeded its timeout (future use)
-        CriticalFailure,   // Critical step failed (future use)
-        SystemShutdown     // Application is shutting down
+        None,              ///< No abort requested
+        UserRequested,     ///< User clicked "Cancel" button
+        Timeout,           ///< Step exceeded its timeout (future use)
+        CriticalFailure,   ///< Critical step failed (future use)
+        SystemShutdown     ///< Application is shutting down
     };
 
     struct StepConfig {

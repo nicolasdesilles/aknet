@@ -41,9 +41,11 @@ namespace aknet {
         core(const core&) = delete;
         core& operator=(const core&) = delete;
 
+        /**
+         * This is a temporary function that simply logs an info message.
+         */
         void test_function();
 
-        // Accessors for owned modules
         startup::StartupManager& startup_manager() { return *startup_manager_; }
         const startup::StartupManager& startup_manager() const { return *startup_manager_; }
 

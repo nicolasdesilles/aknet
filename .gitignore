@@ -77,3 +77,10 @@ src/ui/pnpm-debug.log*
 src/ui/lerna-debug.log*
 logs/
 
+# Python
+.venv/
+venv/
+
+# Docs Site
+site/
+

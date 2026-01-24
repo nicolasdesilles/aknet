@@ -1,0 +1,10 @@
+title: aknet
+description: AES67 Jack Virtual Soundcard
+output: docs
+files:
+  - "src/*.h"
+  - "src/core/**/*.h"
+  - "src/modules/**/*.h"
+  - "src/utils/**/*.h"
+
+
