@@ -7,7 +7,7 @@
 
 #include "startup_manager.h"
 
-namespace aknet::startup {
+namespace aknet::startup::manager {
 
     StartupManager::StartupManager(
         std::shared_ptr<log::Logger> logger,

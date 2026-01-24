@@ -1,12 +1,10 @@
 ---
-generator: doxide
+title: Home
 ---
-
 
 # aknet
 
-AES67 Jack Virtual Soundcard
+**AES67 Jack Virtual Soundcard**
 
-:material-package: [aknet](aknet/index.md)
-:   
+aknet is a virtual soundcard application that connects JACK audio to AES67 networks.
 

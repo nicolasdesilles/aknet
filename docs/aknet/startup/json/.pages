@@ -1,0 +1,4 @@
+title: JSON
+nav:
+  - index.md
+  - ...  # Auto-discover all json pages

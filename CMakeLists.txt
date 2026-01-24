@@ -186,6 +186,25 @@ if(ENABLE_COVERAGE)
     endif()
 endif()
 
+# --------------------------------------------------------------------------------------------------------
+# Documentation (Doxide)
+# --------------------------------------------------------------------------------------------------------
+
+option(AKNET_BUILD_DOCS "Build documentation with doxide" OFF)
+
+if(AKNET_BUILD_DOCS)
+    find_program(DOXIDE_EXECUTABLE doxide)
+
+    if(DOXIDE_EXECUTABLE)
+        add_custom_target(docs
+                COMMAND ${DOXIDE_EXECUTABLE} build
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                COMMENT "Generating documentation with doxide..."
+        )
+    endif()
+
+endif()
+
 
 
 

@@ -1,8 +1,5 @@
 //
-// Created by Nicolas Désilles on 14/01/2026.
-//
-// Fake/placeholder startup steps for end-to-end testing.
-// These simulate real operations with configurable delays and outcomes.
+// steps_definition.h - Placeholder startup step implementations.
 //
 
 #ifndef AKNET_STEPS_DEFINITION_H
@@ -15,15 +12,58 @@
 
 namespace aknet::startup {
 
-    // Base class for fake steps with common delay logic
+    /**
+     * Placeholder and test step implementations.
+     */
+    namespace impl {
+
+        /**
+         * Base class for simulated startup steps.
+     *
+     * Provides a common implementation that simulates work with a configurable delay.
+     * Checks for abort and timeout during the simulated work period.
+     *
+     * @warning
+     * These are placeholder implementations!
+     * Replace with real implementations before production use.
+     *
+     * #### Behavior
+     *
+     * 1. Logs step start
+     * 2. Sleeps in 50ms increments, checking abort/timeout each iteration
+     * 3. Returns the configured outcome when delay completes
+     */
     class FakeStep : public IStartupStep {
     protected:
+        /**
+         * Step configuration.
+         */
         StepConfig config_;
+
+        /**
+         * Simulated execution time.
+         */
         std::chrono::milliseconds delay_;
+
+        /**
+         * Status to return after delay.
+         */
         StepStatus outcome_;
+
+        /**
+         * Message to return with the outcome.
+         */
         std::string outcome_message_;
 
     public:
+        /**
+         * Construct a FakeStep with configuration and behavior.
+         *
+         * @param config Step configuration.
+         * @param delay Simulated execution time.
+         * @param outcome Status to return (default: Success).
+         * @param outcome_message Message to return (default: empty).
+         */
         FakeStep(StepConfig config, 
                  std::chrono::milliseconds delay,
                  StepStatus outcome = StepStatus::Success,
@@ -72,10 +112,15 @@ namespace aknet::startup {
         }
     };
 
-    // -------------------------------------------------------------------------
-    // Concrete Fake Steps
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // Concrete Placeholder Steps
+    // =========================================================================
 
+    /**
+     * Simulates checking for JACK audio server installation.
+     *
+     * In production: Should verify JACK is installed and accessible.
+     */
     class CheckJackInstallationStep : public FakeStep {
     public:
         CheckJackInstallationStep()
@@ -92,6 +137,11 @@ namespace aknet::startup {
         {}
     };
 
+    /**
+     * Simulates discovering an NMOS registry on the network.
+     *
+     * In production: Should use mDNS/DNS-SD to find NMOS registries.
+     */
     class DiscoverNMOSRegistryStep : public FakeStep {
     public:
         DiscoverNMOSRegistryStep()
@@ -108,6 +158,11 @@ namespace aknet::startup {
         {}
     };
 
+    /**
+     * Simulates connecting to an NMOS registry.
+     *
+     * In production: Should establish connection to the discovered registry.
+     */
     class ConnectToRegistryStep : public FakeStep {
     public:
         ConnectToRegistryStep()
@@ -124,6 +179,11 @@ namespace aknet::startup {
         {}
     };
 
+    /**
+     * Simulates loading available audio devices.
+     *
+     * In production: Should enumerate JACK ports and audio interfaces.
+     */
     class LoadAudioDevicesStep : public FakeStep {
     public:
         LoadAudioDevicesStep()
@@ -140,6 +200,11 @@ namespace aknet::startup {
         {}
     };
 
+    /**
+     * Simulates initializing the audio engine.
+     *
+     * In production: Should initialize JACK client, set up audio callbacks.
+     */
     class InitializeAudioEngineStep : public FakeStep {
     public:
         InitializeAudioEngineStep()
@@ -156,6 +221,12 @@ namespace aknet::startup {
         {}
     };
 
+    /**
+     * Simulates loading user preferences.
+     *
+     * This is a non-critical step that can be skipped if it fails.
+     * In production: Should load saved user preferences and apply them.
+     */
     class LoadUserPreferencesStep : public FakeStep {
     public:
         LoadUserPreferencesStep()
@@ -172,10 +243,15 @@ namespace aknet::startup {
         {}
     };
 
-    // -------------------------------------------------------------------------
-    // Special test steps (for testing failure/timeout scenarios)
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // Test Steps
+    // =========================================================================
 
+    /**
+     * A step that always fails.
+     *
+     * Used for testing failure handling and retry logic.
+     */
     class FailingStep : public FakeStep {
     public:
         FailingStep()
@@ -194,6 +270,12 @@ namespace aknet::startup {
         {}
     };
 
+    /**
+     * A step that takes longer than its timeout.
+     *
+     * Used for testing timeout handling.
+     * Has a 2-second timeout but takes 5 seconds to complete.
+     */
     class SlowStep : public FakeStep {
     public:
         SlowStep()
@@ -210,10 +292,26 @@ namespace aknet::startup {
         {}
     };
 
-    // -------------------------------------------------------------------------
-    // Helper to create the default step sequence
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // Factory Function
+    // =========================================================================
 
+    /**
+     * Create the default startup step sequence.
+     *
+     * Returns the standard set of placeholder steps in the correct execution order.
+     *
+     * @return Vector of startup steps ready to be passed to StartupManager::set_steps().
+     *
+     * #### Steps Included
+     *
+     * 1. CheckJackInstallationStep (critical)
+     * 2. DiscoverNMOSRegistryStep (critical)
+     * 3. ConnectToRegistryStep (critical)
+     * 4. LoadAudioDevicesStep (critical)
+     * 5. InitializeAudioEngineStep (critical)
+     * 6. LoadUserPreferencesStep (non-critical)
+     */
     inline std::vector<std::unique_ptr<IStartupStep>> create_default_steps() {
         std::vector<std::unique_ptr<IStartupStep>> steps;
         
@@ -226,6 +324,20 @@ namespace aknet::startup {
         
         return steps;
     }
+
+    } // namespace impl
+
+    // Re-export step implementations at startup:: level for API convenience
+    using impl::FakeStep;
+    using impl::CheckJackInstallationStep;
+    using impl::DiscoverNMOSRegistryStep;
+    using impl::ConnectToRegistryStep;
+    using impl::LoadAudioDevicesStep;
+    using impl::InitializeAudioEngineStep;
+    using impl::LoadUserPreferencesStep;
+    using impl::FailingStep;
+    using impl::SlowStep;
+    using impl::create_default_steps;
 
 } // namespace aknet::startup
 

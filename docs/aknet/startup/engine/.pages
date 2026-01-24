@@ -1,0 +1,4 @@
+title: Engine
+nav:
+  - index.md
+  - ...  # Auto-discover all engine pages

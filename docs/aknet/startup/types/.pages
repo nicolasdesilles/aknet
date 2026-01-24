@@ -1,0 +1,4 @@
+title: Types
+nav:
+  - index.md
+  - ...  # Auto-discover all type pages

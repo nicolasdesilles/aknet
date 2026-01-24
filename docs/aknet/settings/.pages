@@ -1,0 +1,4 @@
+title: Settings
+nav:
+  - index.md
+  - ...  # Auto-discover all settings pages

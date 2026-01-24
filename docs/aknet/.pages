@@ -1,0 +1,9 @@
+title: Reference
+nav:
+  - index.md
+  - Core: core.md
+  - Core Config: core_config.md
+  - Bridge: bridge
+  - Log: log
+  - Settings: settings
+  - Startup: startup

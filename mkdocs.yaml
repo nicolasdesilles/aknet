@@ -1,10 +1,19 @@
 site_name: aknet docs
-site_description:  
+site_description: Documentation for aknet - AES67 Virtual Soundcard
+
+# Navigation is managed by awesome-pages plugin using .pages files
+# See docs/.pages for top-level ordering
+# Each subfolder can have its own .pages file for local ordering
+
 theme:
   name: material
   custom_dir: docs/overrides
   features:
-    - navigation.indexes
+    - navigation.indexes     # Section index pages (index.md as section page)
+    - navigation.sections    # Top-level as groups in sidebar
+    - navigation.path        # Breadcrumbs
+    - toc.follow             # TOC follows scroll
+    - navigation.top         # Back to top button
   palette:
     # Palette toggle for light mode
     - scheme: default
@@ -27,7 +36,11 @@ markdown_extensions:
   - attr_list
   - admonition
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.arithmatex:
       generic: true
   - pymdownx.emoji:
@@ -35,6 +48,7 @@ markdown_extensions:
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
 plugins:
   - search
+  - awesome-pages
 extra_css:
   - stylesheets/doxide.css
 extra_javascript:
