@@ -58,3 +58,8 @@ export interface SequenceCompletedEvent {
 export interface ErrorEvent {
   message: string;
 }
+
+export interface Result {
+  ok: boolean;
+  error: string;
+}

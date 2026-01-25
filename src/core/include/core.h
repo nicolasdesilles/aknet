@@ -276,6 +276,67 @@ namespace aknet {
          */
         const settings::Settings& settings() const { return settings_; }
 
+        // =====================================================================
+        // Settings Bridge (exposed to UI)
+        // =====================================================================
+
+        /**
+         * Get current settings as JSON string.
+         *
+         * Returns a JSON representation of the active settings snapshot.
+         * Thread-safe.
+         *
+         * @return JSON string of current AppSettings.
+         */
+        std::string get_settings_json();
+
+        /**
+         * Get pending settings as JSON string.
+         *
+         * Returns a JSON representation of staged (unsaved) settings.
+         * Thread-safe.
+         *
+         * @return JSON string of pending AppSettings.
+         */
+        std::string get_pending_settings_json();
+
+        /**
+         * Stage a settings change from JSON.
+         *
+         * Parses the JSON string and applies it to pending settings.
+         * Changes are not persisted until save_settings() is called.
+         *
+         * @param json_str JSON string representing AppSettings or a partial update.
+         * @return JSON string of Result {ok, error}.
+         *
+         */
+        std::string stage_settings_json(const std::string& json_str);
+
+        /**
+         * Save pending settings to disk.
+         *
+         * Persists staged changes and computes restart impact.
+         *
+         * @return JSON string of SaveResult {result: {ok, error}, save_impact: {...}}.
+         */
+        std::string save_settings_json();
+
+        /**
+         * Reset pending settings to active snapshot.
+         *
+         * Discards all staged changes.
+         *
+         * @return JSON string of Result {ok, error}.
+         */
+        std::string reset_pending_settings_json();
+
+        /**
+         * Check if there are unsaved pending changes.
+         *
+         * @return true if pending differs from active snapshot.
+         */
+        bool has_pending_settings_changes();
+
     private:
         std::shared_ptr<log::Logger> logger_;
 

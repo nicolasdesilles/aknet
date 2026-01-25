@@ -53,23 +53,24 @@ add_subdirectory(src/core)
 # Modules
 add_subdirectory(src/modules/startup)
 add_subdirectory(src/modules/bridge)
+add_subdirectory(src/modules/jack)
 
 # Utils
 add_subdirectory(src/utils/logger)
 add_subdirectory(src/utils/settings)
 
-# We make the utilities available to all modules
-
 # --------------------------------------------------------------------------------------------------------
 # Tests
-# --------------------------------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------------------------------
 
 if(AKNET_BUILD_TESTS)
     # Module tests
     add_subdirectory(src/core/tests)
+
     add_subdirectory(src/modules/startup/tests)
     add_subdirectory(src/modules/bridge/tests)
+    add_subdirectory(src/modules/jack/tests)
+
     add_subdirectory(src/utils/logger/tests)
     add_subdirectory(src/utils/settings/tests)
 
@@ -82,6 +83,7 @@ if(AKNET_BUILD_TESTS)
             ${AKNET_SETTINGS_TEST_SOURCES}
             ${AKNET_STARTUP_TEST_SOURCES}
             ${AKNET_BRIDGE_TEST_SOURCES}
+            ${AKNET_JACK_TEST_SOURCES}
             ${AKNET_CORE_TEST_SOURCES}
             ${AKNET_INTEGRATION_TEST_SOURCES}
     )
@@ -97,6 +99,8 @@ if(AKNET_BUILD_TESTS)
             aknet_settings
             aknet_startup
             aknet_bridge
+            aknet_jack
+            jack::jack
             nlohmann_json::nlohmann_json
             Catch2::Catch2WithMain
     )
@@ -125,8 +129,6 @@ if(APPLE)
             saucer::saucer
             saucer::embedded
     )
-
-    target_include_directories(aknet PRIVATE ${CMAKE_SOURCE_DIR}/src/startup_steps)
 
     target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
     set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 23 CXX_EXTENSIONS OFF CXX_STANDARD_REQUIRED ON)

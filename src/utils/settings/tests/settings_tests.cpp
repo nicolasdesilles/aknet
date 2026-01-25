@@ -219,7 +219,6 @@ TEST_CASE("Settings | Initialisation", "[settings]") {
 
 }
 
-
 TEST_CASE("Settings | JSON Helpers", "[settings]") {
 
     SECTION("roundtrip of app settings in json strings works") {

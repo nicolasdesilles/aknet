@@ -34,7 +34,29 @@ namespace aknet {
         
         // Loading saved settings
         settings_.load_or_create();
-        
+
+        // Restart rules for settings changes
+        settings_.add_restart_rule({
+            .key = "audio.num_channels",
+            .requires_app_restart = false,
+            .module_name_to_restart = "jack"
+        });
+        settings_.add_restart_rule({
+            .key = "audio.sampling_rate",
+            .requires_app_restart = false,
+            .module_name_to_restart = "jack"
+        });
+        settings_.add_restart_rule({
+            .key = "audio.buffer_size",
+            .requires_app_restart = false,
+            .module_name_to_restart = "jack"
+        });
+        settings_.add_restart_rule({
+            .key = "jack.client_name",
+            .requires_app_restart = false,
+            .module_name_to_restart = "jack"
+        });
+
         // Applying log level stored in settings
         log::set_global_log_level(log::string_to_log_level(settings_.snapshot()->general.log_level));
 
@@ -158,6 +180,75 @@ namespace aknet {
         startup_manager_->clear_steps();
         startup_manager_->set_steps(std::move(steps));
         logger_->info("Set test mode: {}", mode);
+    }
+
+    std::string core::get_settings_json() {
+        auto snapshot = settings_.snapshot();
+        return settings::to_json_string(*snapshot);
+    }
+
+    std::string core::get_pending_settings_json() {
+        auto pending = settings_.pending_copy();
+        return settings::to_json_string(pending);
+    }
+
+    std::string core::stage_settings_json(const std::string& json_str) {
+        settings::AppSettings new_settings;
+        auto parse_result = settings::from_json_string(json_str, new_settings);
+
+        if (!parse_result.ok) {
+            nlohmann::json error_json = {
+                {"ok", false},
+                {"error", "Failed to parse settings JSON: " + parse_result.error}
+            };
+            return error_json.dump();
+        }
+
+        auto stage_result = settings_.stage([&new_settings](settings::AppSettings& s) {
+            s = new_settings;
+        });
+
+        nlohmann::json result_json = {
+            {"ok", stage_result.ok},
+            {"error", stage_result.error}
+        };
+        return result_json.dump();
+    }
+
+    std::string core::save_settings_json() {
+        auto [result, impact] = settings_.save();
+
+        nlohmann::json result_json = {
+            {"ok", result.ok},
+            {"error", result.error}
+        };
+
+        nlohmann::json impact_json = {
+            {"app_restart_required", impact.app_restart_required},
+            {"modules_restart_required", impact.modules_restart_required},
+            {"restart_sensitive_keys_changed", impact.restart_sensitive_keys_changed}
+        };
+
+        nlohmann::json response = {
+            {"result", result_json},
+            {"save_impact", impact_json}
+        };
+
+        return response.dump();
+    }
+
+    std::string core::reset_pending_settings_json() {
+        auto result = settings_.reset_pending_to_active();
+
+        nlohmann::json result_json = {
+            {"ok", result.ok},
+            {"error", result.error}
+        };
+        return result_json.dump();
+    }
+
+    bool core::has_pending_settings_changes() {
+        return settings_.has_pending_changes();
     }
 
     void core::log_aknet_start_message() {

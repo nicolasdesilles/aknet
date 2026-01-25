@@ -35,6 +35,31 @@ coco::stray start(saucer::application* app)
         g_core->set_test_mode(mode); 
     });
 
+    // Settings control functions
+    webview.expose("get_settings", []() -> std::string {
+        return g_core->get_settings_json();
+    });
+
+    webview.expose("get_pending_settings", []() -> std::string {
+        return g_core->get_pending_settings_json();
+    });
+
+    webview.expose("stage_settings", [](const std::string& json_str) -> std::string {
+        return g_core->stage_settings_json(json_str);
+    });
+
+    webview.expose("save_settings", []() -> std::string {
+        return g_core->save_settings_json();
+    });
+
+    webview.expose("reset_pending_settings", []() -> std::string {
+        return g_core->reset_pending_settings_json();
+    });
+
+    webview.expose("has_pending_settings_changes", []() -> bool {
+        return g_core->has_pending_settings_changes();
+    });
+
     webview.embed(saucer::embedded::all());
     webview.serve("/index.html");
     window->show();

@@ -62,6 +62,19 @@ namespace aknet::settings {
     struct Audio {
         int sampling_rate = 48000;  ///< Sample rate in Hz
         int buffer_size = 256;      ///< Audio buffer size in samples
+        int num_channels = 8;       ///< Number of audio channels for the app. Used for JACK Client input channels, AES67 senders, etc.
+    };
+
+    /**
+     * JACK Client settings.
+     *
+     * Contains settings that affect the JACK client created by the aknet.
+     *
+     */
+    struct Jack {
+        std::string client_name = "aknet";                                   ///< Name of the JACK client created by aknet
+        std::string server_executable_path = "/opt/homebrew/bin/jackd";      ///< Path of the jackd executable on the system
+        bool auto_manage_server = false;                                     ///< Allow aknet to restart an externaly started jack server without confirmation
     };
 
     /**
@@ -79,12 +92,14 @@ namespace aknet::settings {
         int schema_version = 1;  ///< Settings file format version for migration support
         General general;         ///< General application settings
         Audio audio;             ///< Audio engine settings
+        Jack jack;               ///< JACK settings
     };
 
     // JSON (de)serialization macros (required for: nlohmann::json j = settings;)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(General, log_level, test_restart_impact);
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Audio, sampling_rate, buffer_size);
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(AppSettings, schema_version, general, audio);
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Audio, sampling_rate, buffer_size, num_channels);
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Jack, client_name, server_executable_path, auto_manage_server);
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(AppSettings, schema_version, general, audio, jack);
 
     // =========================================================================
     // Restart Impact System
