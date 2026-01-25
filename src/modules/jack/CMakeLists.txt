@@ -4,14 +4,20 @@ add_library(aknet_jack STATIC)
 # Source files
 target_sources(aknet_jack
         PRIVATE
+        src/jack.cpp
         src/jack_client.cpp
         src/jack_server_manager.cpp
+        src/posix_process_runner.cpp
+        src/libjack_client_api.cpp
         PUBLIC FILE_SET HEADERS
         BASE_DIRS include
         FILES
+        include/jack.h
         include/jack_client.h
         include/jack_interfaces.h
         include/jack_server_manager.h
+        include/posix_process_runner.h
+        include/libjack_client_api.h
 )
 
 
