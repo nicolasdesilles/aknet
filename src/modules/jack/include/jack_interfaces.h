@@ -8,8 +8,9 @@
 #pragma once
 
 #include <string>
-#include <optional>
 #include <functional>
+
+#include <jack/jack.h>
 
 namespace aknet::jack {
 
@@ -29,6 +30,18 @@ namespace aknet::jack {
         int buffer_size = 0;      ///< Server buffer size in frames
         bool is_running = false;  ///< True if server is reachable
     };
+
+    /**
+     * Type definition for JACK process callback.
+     *
+     * Called by JACK's real-time audio thread for each process cycle.
+     *
+     * @param nframes Number of frames to process.
+     * @param arg User-provided pointer passed to set_process_callback().
+     *
+     * @return 0 on success, non-zero to remove this client.
+     */
+    using JackProcessCallback = std::function<int(uint32_t nframes, void* arg)>;
 
     /**
      * Abstract interface for spawning and managing external processes.
@@ -130,6 +143,31 @@ namespace aknet::jack {
          * @return True if client is active.
          */
         virtual bool is_active() const = 0;
+
+        /**
+         * Get registered input port handles.
+         *
+         * @return Vector of jack_port_t pointers. Empty if no ports registered.
+         *
+         * @note
+         * These handles are needed to access audio buffers in the process callback.
+         */
+        virtual const std::vector<jack_port_t*>& get_input_ports() const = 0;
+
+        /**
+         * Set the process callback for the JACK client.
+         *
+         * The callback will be invoked by JACK's real-time thread for each process cycle.
+         *
+         * @param callback Function to call. Signature: int(uint32_t nframes, void* arg)
+         * @param arg User pointer passed to callback on each invocation.
+         *
+         * @return Result indicating success or error.
+         *
+         * @note
+         * Must be called BEFORE activate().
+         */
+        virtual Result set_process_callback(JackProcessCallback callback, void* arg) = 0;
     };
 
 } // namespace aknet::jack

@@ -8,6 +8,8 @@
 #pragma once
 
 #include "jack_interfaces.h"
+#include <jack_audio_processor.h>
+
 #include <logger.h>
 #include <memory>
 #include <string>
@@ -169,6 +171,32 @@ namespace aknet::jack {
          */
         int get_input_port_count() const;
 
+        /**
+         * Set the audio processor for this client.
+         *
+         * The processor's process() method will be called from JACK's RT thread.
+         *
+         * @param processor Shared pointer to audio processor.
+         *
+         * @return Result indicating success or error.
+         *
+         * @note
+         * Must be called BEFORE activate().
+         */
+        Result set_audio_processor(const std::shared_ptr<JackAudioProcessor>& processor);
+
+        /**
+         * Get current audio levels (thread-safe).
+         *
+         * @return Vector of meters, or empty if no processor set.
+         */
+        std::vector<ChannelMeter> get_audio_levels() const;
+
+        /**
+         * Reset peak hold meters (thread-safe).
+         */
+        void reset_peak_levels();
+
     private:
         std::shared_ptr<log::Logger> logger_;
         std::shared_ptr<IJackClientAPI> client_api_;
@@ -176,6 +204,12 @@ namespace aknet::jack {
         ClientState state_ = ClientState::Closed;
         std::string client_name_;
         int input_port_count_ = 0;
+
+        std::shared_ptr<JackAudioProcessor> audio_processor_;
+        std::vector<jack_port_t*> input_ports_;  // Store for callback access
+
+        // Instance callback
+        int process_callback(jack_nframes_t nframes);
     };
 
 } // namespace aknet::jack

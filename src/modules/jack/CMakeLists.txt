@@ -7,6 +7,7 @@ target_sources(aknet_jack
         src/jack.cpp
         src/jack_client.cpp
         src/jack_server_manager.cpp
+        src/jack_audio_processor.cpp
         src/posix_process_runner.cpp
         src/libjack_client_api.cpp
         PUBLIC FILE_SET HEADERS
@@ -16,6 +17,7 @@ target_sources(aknet_jack
         include/jack_client.h
         include/jack_interfaces.h
         include/jack_server_manager.h
+        include/jack_audio_processor.h
         include/posix_process_runner.h
         include/libjack_client_api.h
 )

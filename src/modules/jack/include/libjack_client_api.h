@@ -105,6 +105,10 @@ namespace aknet::jack {
 
         bool is_active() const override;
 
+        Result set_process_callback(JackProcessCallback callback, void* arg) override;
+
+        const std::vector<jack_port_t*>& get_input_ports() const override;
+
     private:
         std::shared_ptr<log::Logger> logger_;
 
@@ -113,6 +117,13 @@ namespace aknet::jack {
 
         // Track registered ports for cleanup
         std::vector<jack_port_t*> ports_;
+
+        // Process callback state
+        JackProcessCallback user_callback_;
+        void* user_callback_arg_ = nullptr;
+
+        // Static C callback wrapper for libjack
+        static int process_callback_c_wrapper(jack_nframes_t nframes, void* arg);
 
         /**
          * Get JACK status string from status bits.

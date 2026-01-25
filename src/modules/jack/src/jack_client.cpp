@@ -7,145 +7,223 @@
 
 namespace aknet::jack {
 
-JackClient::JackClient(
-    std::shared_ptr<log::Logger> logger,
-    std::shared_ptr<IJackClientAPI> client_api)
-    : logger_(std::move(logger))
-    , client_api_(std::move(client_api))
-{
-    if (!logger_) {
-        throw std::invalid_argument("Logger cannot be null");
-    }
-    if (!client_api_) {
-        throw std::invalid_argument("Client API cannot be null");
-    }
-}
-
-JackClient::~JackClient() {
-    close();
-}
-
-Result JackClient::open(const std::string& client_name) {
-    if (state_ != ClientState::Closed) {
-        logger_->warn("Attempted to open client when already open");
-        return {false, "Client already open"};
+    JackClient::JackClient(
+        std::shared_ptr<log::Logger> logger,
+        std::shared_ptr<IJackClientAPI> client_api)
+        : logger_(std::move(logger))
+        , client_api_(std::move(client_api))
+    {
+        if (!logger_) {
+            throw std::invalid_argument("Logger cannot be null");
+        }
+        if (!client_api_) {
+            throw std::invalid_argument("Client API cannot be null");
+        }
     }
 
-    if (client_name.empty()) {
-        logger_->error("Cannot open client with empty name");
-        return {false, "Client name cannot be empty"};
+    JackClient::~JackClient() {
+        close();
     }
 
-    logger_->info("Opening JACK client: {}", client_name);
+    Result JackClient::open(const std::string& client_name) {
+        if (state_ != ClientState::Closed) {
+            logger_->warn("Attempted to open client when already open");
+            return {false, "Client already open"};
+        }
 
-    auto result = client_api_->open_client(client_name);
+        if (client_name.empty()) {
+            logger_->error("Cannot open client with empty name");
+            return {false, "Client name cannot be empty"};
+        }
 
-    if (!result.ok) {
-        logger_->error("Failed to open JACK client: {}", result.error);
+        logger_->info("Opening JACK client: {}", client_name);
+
+        auto result = client_api_->open_client(client_name);
+
+        if (!result.ok) {
+            logger_->error("Failed to open JACK client: {}", result.error);
+            return result;
+        }
+
+        state_ = ClientState::Open;
+        client_name_ = client_name;
+        logger_->info("JACK client opened successfully");
+
         return result;
     }
 
-    state_ = ClientState::Open;
-    client_name_ = client_name;
-    logger_->info("JACK client opened successfully");
+    Result JackClient::register_input_ports(int count) {
+        if (state_ == ClientState::Closed) {
+            logger_->error("Cannot register ports: client not open");
+            return {false, "Client not open"};
+        }
 
-    return result;
-}
+        if (state_ == ClientState::Active) {
+            logger_->error("Cannot register ports: client already active");
+            return {false, "Cannot change ports after client is active"};
+        }
 
-Result JackClient::register_input_ports(int count) {
-    if (state_ == ClientState::Closed) {
-        logger_->error("Cannot register ports: client not open");
-        return {false, "Client not open"};
-    }
+        if (count < 1) {
+            logger_->error("Invalid port count: {}", count);
+            return {false, "Invalid port count"};
+        }
 
-    if (state_ == ClientState::Active) {
-        logger_->error("Cannot register ports: client already active");
-        return {false, "Cannot change ports after client is active"};
-    }
+        logger_->info("Registering {} input ports", count);
 
-    if (count < 1) {
-        logger_->error("Invalid port count: {}", count);
-        return {false, "Invalid port count"};
-    }
+        auto result = client_api_->register_input_ports(count);
 
-    logger_->info("Registering {} input ports", count);
+        if (!result.ok) {
+            logger_->error("Failed to register input ports: {}", result.error);
+            return result;
+        }
 
-    auto result = client_api_->register_input_ports(count);
+        input_port_count_ = count;
 
-    if (!result.ok) {
-        logger_->error("Failed to register input ports: {}", result.error);
+        input_ports_ = client_api_->get_input_ports();
+
+        logger_->info("Registered {} input ports", count);
+
         return result;
     }
 
-    input_port_count_ = count;
-    logger_->info("Registered {} input ports", count);
+    Result JackClient::activate() {
+        if (state_ == ClientState::Closed) {
+            logger_->error("Cannot activate: client not open");
+            return {false, "Client not open"};
+        }
 
-    return result;
-}
+        if (state_ == ClientState::Active) {
+            logger_->warn("Client already active");
+            return {false, "Client already active"};
+        }
 
-Result JackClient::activate() {
-    if (state_ == ClientState::Closed) {
-        logger_->error("Cannot activate: client not open");
-        return {false, "Client not open"};
-    }
+        logger_->info("Activating JACK client");
 
-    if (state_ == ClientState::Active) {
-        logger_->warn("Client already active");
-        return {false, "Client already active"};
-    }
+        auto result = client_api_->activate();
 
-    logger_->info("Activating JACK client");
+        if (!result.ok) {
+            logger_->error("Failed to activate JACK client: {}", result.error);
+            return result;
+        }
 
-    auto result = client_api_->activate();
+        state_ = ClientState::Active;
+        logger_->info("JACK client activated");
 
-    if (!result.ok) {
-        logger_->error("Failed to activate JACK client: {}", result.error);
         return result;
     }
 
-    state_ = ClientState::Active;
-    logger_->info("JACK client activated");
+    Result JackClient::close() {
+        if (state_ == ClientState::Closed) {
+            logger_->debug("Client already closed");
+            return {true, ""};
+        }
 
-    return result;
-}
+        logger_->info("Closing JACK client");
 
-Result JackClient::close() {
-    if (state_ == ClientState::Closed) {
-        logger_->debug("Client already closed");
-        return {true, ""};
-    }
+        auto result = client_api_->close_client();
 
-    logger_->info("Closing JACK client");
+        if (!result.ok) {
+            logger_->error("Failed to close JACK client: {}", result.error);
+            return result;
+        }
 
-    auto result = client_api_->close_client();
+        state_ = ClientState::Closed;
+        client_name_.clear();
+        input_port_count_ = 0;
+        input_ports_.clear();
+        audio_processor_.reset();
+        logger_->info("JACK client closed");
 
-    if (!result.ok) {
-        logger_->error("Failed to close JACK client: {}", result.error);
         return result;
     }
 
-    state_ = ClientState::Closed;
-    client_name_.clear();
-    input_port_count_ = 0;
-    logger_->info("JACK client closed");
+    bool JackClient::is_active() const {
+        return state_ == ClientState::Active;
+    }
 
-    return result;
-}
+    ClientState JackClient::get_state() const {
+        return state_;
+    }
 
-bool JackClient::is_active() const {
-    return state_ == ClientState::Active;
-}
+    std::string JackClient::get_client_name() const {
+        return client_name_;
+    }
 
-ClientState JackClient::get_state() const {
-    return state_;
-}
+    int JackClient::get_input_port_count() const {
+        return input_port_count_;
+    }
 
-std::string JackClient::get_client_name() const {
-    return client_name_;
-}
+    Result JackClient::set_audio_processor(const std::shared_ptr<JackAudioProcessor>& processor) {
+        if (state_ == ClientState::Active) {
+            return { false, "Cannot set processor after activation" };
+        }
 
-int JackClient::get_input_port_count() const {
-    return input_port_count_;
-}
+        if (!processor) {
+            return { false, "Processor cannot be null" };
+        }
+
+        audio_processor_ = processor;
+
+        // Register callback with JACK API
+        auto result = client_api_->set_process_callback(
+            [this](uint32_t nframes, void* /*arg*/) {
+                return this->process_callback(nframes);
+            },
+            this  // Pass 'this' as user arg
+        );
+
+        if (!result.ok) {
+            audio_processor_.reset();
+            return result;
+        }
+
+        return { true, "" };
+    }
+
+    int JackClient::process_callback(jack_nframes_t nframes) {
+        if (!audio_processor_) {
+            return 0;  // No-op if no processor (silence is okay)
+        }
+
+        // Validate we have ports
+        if (input_ports_.empty()) {
+            logger_->error("Process callback invoked with no ports registered");
+            return 1;  // Error: deactivate client
+        }
+
+        // Get buffer pointers from JACK ports
+        std::vector<const float*> buffers;
+        buffers.reserve(input_ports_.size());
+
+        for (auto* port : input_ports_) {
+            // jack_port_get_buffer() can return NULL if something is wrong
+            void* buffer_raw = jack_port_get_buffer(port, nframes);
+            if (!buffer_raw) {
+                logger_->error("jack_port_get_buffer() returned NULL for port");
+                return 1;  // Error: deactivate client
+            }
+
+            auto* buffer = static_cast<float*>(buffer_raw);
+            buffers.push_back(buffer);
+        }
+
+        // Process audio
+        audio_processor_->process(nframes, buffers.data());
+
+        return 0;  // Success
+    }
+
+    std::vector<ChannelMeter> JackClient::get_audio_levels() const {
+        if (!audio_processor_) {
+            return {};
+        }
+        return audio_processor_->get_meters();
+    }
+
+    void JackClient::reset_peak_levels() {
+        if (audio_processor_) {
+            audio_processor_->reset_peaks();
+        }
+    }
 
 } // namespace aknet::jack

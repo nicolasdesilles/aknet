@@ -386,3 +386,126 @@ TEST_CASE("Jack | JackClient - State queries", "[jack][client]") {
     }
 
 }
+
+TEST_CASE("Jack | JackClient - Set audio processor", "[jack][client]") {
+    JackClientTestFixture f;
+    jack::JackClient client(f.logger, f.client_api);
+
+    client.open("test_client");
+    client.register_input_ports(2);
+
+    auto processor = std::make_shared<jack::JackAudioProcessor>(2);
+
+    SECTION("successfully sets processor before activation") {
+        auto result = client.set_audio_processor(processor);
+
+        CHECK(result.ok);
+        // Verify callback was registered with API
+        CHECK(f.client_api->process_callback_ != nullptr);
+    }
+
+    SECTION("cannot set processor after activation") {
+        client.set_audio_processor(processor);
+        client.activate();
+
+        auto processor2 = std::make_shared<jack::JackAudioProcessor>(2);
+        auto result = client.set_audio_processor(processor2);
+
+        CHECK_FALSE(result.ok);
+        CHECK_THAT(result.error, Catch::Matchers::ContainsSubstring("after activation"));
+    }
+
+    SECTION("cannot set null processor") {
+        auto result = client.set_audio_processor(nullptr);
+
+        CHECK_FALSE(result.ok);
+        CHECK_THAT(result.error, Catch::Matchers::ContainsSubstring("null"));
+    }
+
+    SECTION("processor channel count should match port count") {
+        // Mismatch: 2 ports but processor expects 4 channels
+        auto wrong_processor = std::make_shared<jack::JackAudioProcessor>(4);
+
+        // This test verifies conceptual mismatch - actual audio data
+        // won't cause crashes but meters for channels 2-3 will show silence
+        // (This is informational, not a failure condition)
+        auto result = client.set_audio_processor(wrong_processor);
+        CHECK(result.ok);  // API allows this, but it's not recommended
+    }
+}
+
+TEST_CASE("Jack | JackClient - Audio processing", "[jack][client]") {
+    JackClientTestFixture f;
+    jack::JackClient client(f.logger, f.client_api);
+
+    client.open("test_client");
+    client.register_input_ports(2);
+
+    auto processor = std::make_shared<jack::JackAudioProcessor>(2);
+    client.set_audio_processor(processor);
+    client.activate();
+
+    SECTION("can get audio levels") {
+        auto levels = client.get_audio_levels();
+
+        CHECK(levels.size() == 2);
+        // Initial levels should be -inf dB (silence)
+        CHECK(std::isinf(levels[0].rms_db));
+        CHECK(std::isinf(levels[1].rms_db));
+    }
+
+    SECTION("can reset peak levels") {
+        // Should not crash
+        client.reset_peak_levels();
+
+        auto levels = client.get_audio_levels();
+        CHECK(levels.size() == 2);
+    }
+
+    SECTION("process callback updates levels (simulated)") {
+        // Note: This is a basic test with the mock
+        // Real audio data testing would require integration tests
+
+        // Simulate JACK calling the process callback
+        f.client_api->simulate_process_cycle(256);
+
+        // Callback was invoked (no crash is success for this test)
+        // Actual level values would require mock buffers
+        auto levels = client.get_audio_levels();
+        CHECK(levels.size() == 2);
+    }
+
+    SECTION("get_audio_levels returns empty if no processor set") {
+        jack::JackClient client2(f.logger, f.client_api);
+
+        auto levels = client2.get_audio_levels();
+        CHECK(levels.empty());
+    }
+}
+
+TEST_CASE("Jack | JackClient - Audio processor lifecycle", "[jack][client]") {
+    JackClientTestFixture f;
+    jack::JackClient client(f.logger, f.client_api);
+
+    SECTION("processor survives close/reopen cycle") {
+        client.open("test_client");
+        client.register_input_ports(2);
+
+        auto processor = std::make_shared<jack::JackAudioProcessor>(2);
+        client.set_audio_processor(processor);
+        client.activate();
+
+        // Process some audio (simulated)
+        f.client_api->simulate_process_cycle(256);
+
+        // Close client
+        client.close();
+
+        // Reopen and set processor again
+        client.open("test_client2");
+        client.register_input_ports(2);
+
+        auto result = client.set_audio_processor(processor);
+        CHECK(result.ok);
+    }
+}

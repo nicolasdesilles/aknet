@@ -13,12 +13,14 @@
 #include <sstream>
 #include <filesystem>
 #include <chrono>
+#include <cmath>
 
 #include <logger.h>
 #include <settings.h>
 
 #include <jack_interfaces.h>
 #include <jack_server_manager.h>
+
 
 namespace aknet::test {
 
@@ -146,6 +148,16 @@ public:
         if (!client_open_) {
             return {false, "Client not open"};
         }
+
+        // Clear existing mock ports
+        mock_ports_.clear();
+
+        // Create fake port handles (just cast integers to pointers for mocking)
+        for (int i = 0; i < count; ++i) {
+            // Create fake non-null pointer (tests don't dereference these)
+            mock_ports_.push_back(reinterpret_cast<jack_port_t*>(static_cast<intptr_t>(i + 1)));
+        }
+
         input_port_count_ = count;
         return {true, ""};
     }
@@ -164,12 +176,40 @@ public:
         }
         client_open_ = false;
         client_active_ = false;
+        mock_ports_.clear();
         return {true, ""};
     }
 
     bool is_active() const override {
         return client_active_;
     }
+
+    const std::vector<jack_port_t*>& get_input_ports() const override {
+        return mock_ports_;
+    }
+
+    jack::Result set_process_callback(jack::JackProcessCallback callback, void* arg) override {
+        if (!client_open_) {
+            return { false, "Client not open" };
+        }
+        if (client_active_) {
+            return { false, "Cannot set callback after activation" };
+        }
+        process_callback_ = callback;
+        process_callback_arg_ = arg;
+        return { true, "" };
+    }
+
+    // Helper for tests: simulate JACK calling the callback
+    void simulate_process_cycle(uint32_t num_samples) {
+        if (process_callback_ && client_active_) {
+            process_callback_(num_samples, process_callback_arg_);
+        }
+    }
+
+    // Public for test access
+    jack::JackProcessCallback process_callback_;  // ← Qualified!
+    void* process_callback_arg_ = nullptr;
 
     int get_probe_call_count() const { return probe_call_count_; }
     const std::string& get_client_name() const { return client_name_; }
@@ -182,6 +222,7 @@ private:
     bool client_active_ = false;
     std::string client_name_;
     int input_port_count_ = 0;
+    std::vector<jack_port_t*> mock_ports_;
 };
 
 /**
@@ -224,5 +265,6 @@ struct JackClientTestFixture {
         log::shutdown();
     }
 };
+
 
 } // namespace aknet::test
