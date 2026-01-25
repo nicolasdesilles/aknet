@@ -205,4 +205,24 @@ struct JackServerManagerTestFixture {
     }
 };
 
+
+/**
+ * Test fixture for JACK client tests.
+ */
+struct JackClientTestFixture {
+    std::shared_ptr<log::Logger> logger;
+    std::shared_ptr<MockJackClientAPI> client_api;
+    TempDir temp_dir;
+
+    JackClientTestFixture() {
+        log::init(temp_dir.path());
+        logger = log::get("jack_client_test");
+        client_api = std::make_shared<MockJackClientAPI>();
+    }
+
+    ~JackClientTestFixture() {
+        log::shutdown();
+    }
+};
+
 } // namespace aknet::test
