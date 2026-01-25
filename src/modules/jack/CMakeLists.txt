@@ -5,10 +5,13 @@ add_library(aknet_jack STATIC)
 target_sources(aknet_jack
         PRIVATE
         src/jack.cpp
+        src/jack_server_manager.cpp
         PUBLIC FILE_SET HEADERS
         BASE_DIRS include
         FILES
         include/jack.h
+        include/jack_interfaces.h
+        include/jack_server_manager.h
 )
 
 
@@ -24,7 +27,7 @@ target_include_directories(aknet_jack
 target_compile_features(aknet_jack PRIVATE cxx_std_23)
 
 # External dependencies
-target_link_libraries(aknet_bridge PUBLIC
+target_link_libraries(aknet_jack PUBLIC
         aknet_logger
         aknet_settings
         jack::jack
