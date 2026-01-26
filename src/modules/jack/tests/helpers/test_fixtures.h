@@ -22,6 +22,8 @@
 #include <jack_interfaces.h>
 #include <jack_server_manager.h>
 
+#include "audio_device_manager.h"
+
 
 namespace aknet::test {
 
@@ -313,6 +315,112 @@ namespace aknet::test {
         }
 
         ~JackModuleTestFixture() {
+            log::shutdown();
+        }
+    };
+
+    // ============================================================================
+    // Audio Device Manager Mocks
+    // ============================================================================
+
+    /**
+     * Mock implementation of IAudioDeviceManager for testing.
+     *
+     * Allows tests to configure available devices and control enumeration behavior.
+     */
+    class MockAudioDeviceManager : public jack::IAudioDeviceManager {
+    public:
+        MockAudioDeviceManager() {
+            // Default: provide system_default device
+            devices_.push_back({
+                .id = "system_default",
+                .name = "System Default",
+                .input_channels = 2,
+                .output_channels = 2,
+                .is_default = true
+            });
+        }
+
+        // Configure the mock
+        void set_devices(std::vector<jack::AudioDevice> devices) {
+            devices_ = std::move(devices);
+        }
+
+        void add_device(jack::AudioDevice device) {
+            devices_.push_back(std::move(device));
+        }
+
+        void clear_devices() {
+            devices_.clear();
+        }
+
+        // IAudioDeviceManager interface
+        std::vector<jack::AudioDevice> enumerate_devices() override {
+            enumerate_call_count_++;
+            return devices_;
+        }
+
+        std::optional<jack::AudioDevice> get_device_by_id(const std::string& id) override {
+            get_device_call_count_++;
+            last_device_id_queried_ = id;
+
+            for (const auto& device : devices_) {
+                if (device.id == id) {
+                    return device;
+                }
+            }
+            return std::nullopt;
+        }
+
+        jack::AudioDevice get_default_device() override {
+            get_default_call_count_++;
+
+            for (const auto& device : devices_) {
+                if (device.id == "system_default") {
+                    return device;
+                }
+            }
+
+            // Fallback if no system_default configured
+            return {
+                .id = "system_default",
+                .name = "System Default",
+                .input_channels = 2,
+                .output_channels = 2,
+                .is_default = true
+            };
+        }
+
+        // Test inspection
+        int get_enumerate_call_count() const { return enumerate_call_count_; }
+        int get_device_call_count() const { return get_device_call_count_; }
+        int get_default_call_count() const { return get_default_call_count_; }
+        std::string get_last_device_id_queried() const { return last_device_id_queried_; }
+
+    private:
+        std::vector<jack::AudioDevice> devices_;
+        int enumerate_call_count_ = 0;
+        int get_device_call_count_ = 0;
+        int get_default_call_count_ = 0;
+        std::string last_device_id_queried_;
+    };
+
+    /**
+     * Test fixture for audio device manager tests.
+     */
+    struct AudioDeviceManagerTestFixture {
+        std::shared_ptr<log::Logger> logger;
+        std::shared_ptr<MockAudioDeviceManager> device_manager;
+        TempDir temp_dir;
+        settings::AppSettings settings;
+
+        AudioDeviceManagerTestFixture() {
+            log::init(temp_dir.path());
+            logger = log::get("audio_m_t");
+            device_manager = std::make_shared<MockAudioDeviceManager>();
+        };
+
+        ~AudioDeviceManagerTestFixture() {
             log::shutdown();
         }
     };
