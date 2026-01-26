@@ -7,6 +7,8 @@ export interface Audio {
   sampling_rate: number;
   buffer_size: number;
   num_channels: number;
+  input_device_id: string;
+  output_device_id: string;
 }
 
 export interface Jack {

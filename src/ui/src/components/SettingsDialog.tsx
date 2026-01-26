@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { call } from "@saucer-dev/types";
 import { Settings } from "lucide-react";
 
+import { AudioDeviceSelect } from "./AudioDeviceSelect";
+
 import type { AppSettings, SaveResult, Result } from "@/types/settings";
 
 import {
@@ -32,7 +34,7 @@ export function SettingsDialog({ disabled = false }: SettingsDialogProps) {
 
     const changes: boolean = await call<boolean>(
       "has_pending_settings_changes",
-      []
+      [],
     );
     setHasChanges(changes);
   }, []);
@@ -46,7 +48,7 @@ export function SettingsDialog({ disabled = false }: SettingsDialogProps) {
   const handleChange = (
     section: keyof AppSettings,
     key: string,
-    value: string | number | boolean
+    value: string | number | boolean,
   ) => {
     if (!pending) return;
 
@@ -91,7 +93,7 @@ export function SettingsDialog({ disabled = false }: SettingsDialogProps) {
         alert("The app needs to be restarted for the changes to take effect.");
       } else if (saveResult.save_impact.modules_restart_required.length > 0) {
         alert(
-          `Module restart required: ${saveResult.save_impact.modules_restart_required.join(", ")}`
+          `Module restart required: ${saveResult.save_impact.modules_restart_required.join(", ")}`,
         );
       }
 
@@ -115,7 +117,7 @@ export function SettingsDialog({ disabled = false }: SettingsDialogProps) {
     if (!newOpen && hasChanges) {
       if (
         !confirm(
-          "You have unsaved changes. Are you sure you want to close without saving?"
+          "You have unsaved changes. Are you sure you want to close without saving?",
         )
       ) {
         return;
@@ -157,7 +159,9 @@ export function SettingsDialog({ disabled = false }: SettingsDialogProps) {
               </h3>
               <div className="grid gap-3">
                 <div className="grid gap-1.5">
-                  <label className="text-sm font-medium">Sample Rate (Hz)</label>
+                  <label className="text-sm font-medium">
+                    Sample Rate (Hz)
+                  </label>
                   <Input
                     type="number"
                     value={pending.audio.sampling_rate}
@@ -165,7 +169,7 @@ export function SettingsDialog({ disabled = false }: SettingsDialogProps) {
                       handleChange(
                         "audio",
                         "sampling_rate",
-                        parseInt(e.target.value)
+                        parseInt(e.target.value),
                       )
                     }
                   />
@@ -181,7 +185,7 @@ export function SettingsDialog({ disabled = false }: SettingsDialogProps) {
                       handleChange(
                         "audio",
                         "buffer_size",
-                        parseInt(e.target.value)
+                        parseInt(e.target.value),
                       )
                     }
                   />
@@ -197,7 +201,7 @@ export function SettingsDialog({ disabled = false }: SettingsDialogProps) {
                       handleChange(
                         "audio",
                         "num_channels",
-                        parseInt(e.target.value)
+                        parseInt(e.target.value),
                       )
                     }
                   />
@@ -230,9 +234,31 @@ export function SettingsDialog({ disabled = false }: SettingsDialogProps) {
                       handleChange(
                         "jack",
                         "server_executable_path",
-                        e.target.value
+                        e.target.value,
                       )
                     }
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <label className="text-sm font-medium">Input Device</label>
+                  <AudioDeviceSelect
+                    value={pending.audio.input_device_id}
+                    onChange={(value) =>
+                      handleChange("audio", "input_device_id", value)
+                    }
+                    filterType="input"
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <label className="text-sm font-medium">Output Device</label>
+                  <AudioDeviceSelect
+                    value={pending.audio.output_device_id}
+                    onChange={(value) =>
+                      handleChange("audio", "output_device_id", value)
+                    }
+                    filterType="output"
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -241,7 +267,11 @@ export function SettingsDialog({ disabled = false }: SettingsDialogProps) {
                     id="auto-manage-server"
                     checked={pending.jack.auto_manage_server}
                     onChange={(e) =>
-                      handleChange("jack", "auto_manage_server", e.target.checked)
+                      handleChange(
+                        "jack",
+                        "auto_manage_server",
+                        e.target.checked,
+                      )
                     }
                     className="h-4 w-4 rounded border-input"
                   />

@@ -60,6 +60,14 @@ coco::stray start(saucer::application* app)
         return g_core->has_pending_settings_changes();
     });
 
+    webview.expose("get_audio_devices", []() -> std::string {
+        return g_core->get_audio_devices_json();
+    });
+
+    webview.expose("get_default_audio_device", []() -> std::string {
+        return g_core->get_default_audio_device_json();
+    });
+
     webview.embed(saucer::embedded::all());
     webview.serve("/index.html");
     window->show();

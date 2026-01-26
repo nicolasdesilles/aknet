@@ -6,6 +6,7 @@
 #define AKNET_JACK_H
 
 #include "jack_interfaces.h"
+#include "audio_device_manager.h"
 #include <logger.h>
 #include <memory>
 
@@ -41,6 +42,21 @@ namespace aknet::jack {
      * @return Shared pointer to LibJackClientAPI.
      */
     std::shared_ptr<IJackClientAPI> create_libjack_client_api(
+        std::shared_ptr<log::Logger> logger
+    );
+
+    /**
+     * Factory function to create a platform-appropriate AudioDeviceManager.
+     *
+     * Returns:
+     * - CoreAudioDeviceManager on macOS
+     * - AlsaDeviceManager on Linux (future)
+     * - WasapiDeviceManager on Windows (future)
+     *
+     * @param logger Logger instance.
+     * @return Shared pointer to IAudioDeviceManager.
+     */
+    std::shared_ptr<IAudioDeviceManager> create_device_manager(
         std::shared_ptr<log::Logger> logger
     );
 

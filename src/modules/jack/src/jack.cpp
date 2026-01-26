@@ -23,4 +23,10 @@ namespace aknet::jack {
         return std::make_shared<LibJackClientAPI>(std::move(logger));
     }
 
+    std::shared_ptr<IAudioDeviceManager> create_device_manager(
+    std::shared_ptr<log::Logger> logger)
+    {
+        return create_audio_device_manager(logger);
+    }
+
 } // namespace aknet::jack

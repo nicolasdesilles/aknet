@@ -63,6 +63,8 @@ namespace aknet::settings {
         int sampling_rate = 48000;  ///< Sample rate in Hz
         int buffer_size = 256;      ///< Audio buffer size in samples
         int num_channels = 8;       ///< Number of audio channels for the app. Used for JACK Client input channels, AES67 senders, etc.
+        std::string input_device_id = "system_default";   ///< Input audio device ID. Use "system_default" to follow OS default device.
+        std::string output_device_id = "system_default";  ///< Output audio device ID. Use "system_default" to follow OS default device.
     };
 
     /**
@@ -97,7 +99,7 @@ namespace aknet::settings {
 
     // JSON (de)serialization macros (required for: nlohmann::json j = settings;)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(General, log_level, test_restart_impact);
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Audio, sampling_rate, buffer_size, num_channels);
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Audio, sampling_rate, buffer_size, num_channels, input_device_id, output_device_id);
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Jack, client_name, server_executable_path, auto_manage_server);
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(AppSettings, schema_version, general, audio, jack);
 

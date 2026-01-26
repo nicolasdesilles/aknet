@@ -5,8 +5,11 @@
 #include "core.h"
 #include <version.h>
 #include <bridge.h>
+#include <jack.h>
 #include <saucer/smartview.hpp>
 #include <steps_definition.h>
+
+
 
 namespace aknet {
 
@@ -53,6 +56,16 @@ namespace aknet {
         });
         settings_.add_restart_rule({
             .key = "jack.client_name",
+            .requires_app_restart = false,
+            .module_name_to_restart = "jack"
+        });
+        settings_.add_restart_rule({
+            .key = "audio.input_device_id",
+            .requires_app_restart = false,
+            .module_name_to_restart = "jack"
+        });
+        settings_.add_restart_rule({
+            .key = "audio.output_device_id",
             .requires_app_restart = false,
             .module_name_to_restart = "jack"
         });
@@ -244,6 +257,79 @@ namespace aknet {
 
     bool core::has_pending_settings_changes() {
         return settings_.has_pending_changes();
+    }
+
+    std::string core::get_audio_devices_json() {
+        if (!jack_module_) {
+            nlohmann::json error = {
+                {"error", "Jack module not initialized"},
+                {"devices", nlohmann::json::array()}
+            };
+            return error.dump();
+        }
+
+        try {
+            // Get device manager from jack module
+            // We need to create a device manager since it's not exposed
+            auto logger = log::get("core");
+            auto device_manager = jack::create_device_manager(logger);
+
+            auto devices = device_manager->enumerate_devices();
+
+            nlohmann::json devices_json = nlohmann::json::array();
+
+            for (const auto& device : devices) {
+                nlohmann::json device_json = {
+                    {"id", device.id},
+                    {"name", device.name},
+                    {"input_channels", device.input_channels},
+                    {"output_channels", device.output_channels},
+                    {"is_default", device.is_default}
+                };
+                devices_json.push_back(device_json);
+            }
+
+            return devices_json.dump();
+
+        } catch (const std::exception& e) {
+            nlohmann::json error = {
+                {"error", std::string("Failed to enumerate devices: ") + e.what()},
+                {"devices", nlohmann::json::array()}
+            };
+            return error.dump();
+        }
+    }
+
+    std::string core::get_default_audio_device_json() {
+        if (!jack_module_) {
+            nlohmann::json error = {
+                {"error", "Jack module not initialized"}
+            };
+            return error.dump();
+        }
+
+        try {
+            auto logger = log::get("core");
+            auto device_manager = jack::create_device_manager(logger);
+
+            auto device = device_manager->get_default_device();
+
+            nlohmann::json device_json = {
+                {"id", device.id},
+                {"name", device.name},
+                {"input_channels", device.input_channels},
+                {"output_channels", device.output_channels},
+                {"is_default", device.is_default}
+            };
+
+            return device_json.dump();
+
+        } catch (const std::exception& e) {
+            nlohmann::json error = {
+                {"error", std::string("Failed to get default device: ") + e.what()}
+            };
+            return error.dump();
+        }
     }
 
     void core::log_aknet_start_message() {

@@ -338,6 +338,29 @@ namespace aknet {
          */
         bool has_pending_settings_changes();
 
+        /**
+         * Get available audio devices as JSON.
+         *
+         * Returns a JSON array of AudioDevice objects with properties:
+         * - id: device identifier
+         * - name: human-readable name
+         * - input_channels: number of input channels
+         * - output_channels: number of output channels
+         * - is_default: true if this is the system default device
+         *
+         * @return JSON array string of AudioDevice objects.
+         */
+        std::string get_audio_devices_json();
+
+        /**
+         * Get the system default audio device as JSON.
+         *
+         * Returns a JSON object representing the current system default device.
+         *
+         * @return JSON object string of AudioDevice.
+         */
+        std::string get_default_audio_device_json();
+
 
         /**
          * Retrieves the current audio levels.

@@ -12,6 +12,8 @@
 #include <memory>
 #include <optional>
 
+#include "audio_device_manager.h"
+
 namespace aknet::jack {
     /**
      * Configuration for JACK server management
@@ -20,6 +22,8 @@ namespace aknet::jack {
         std::string executable_path;   ///< Path to jackd executable
         int sample_rate = 48000;       ///< Target sample rate
         int buffer_size = 256;         ///< Target buffer size
+        std::string input_device_id = "system_default";     ///< Input device ID. Use "system_default" for driver default.
+        std::string output_device_id = "system_default";    ///< Output device ID. Use "system_default" for driver default.
     };
 
     /**
@@ -61,6 +65,7 @@ namespace aknet::jack {
             std::shared_ptr<log::Logger> logger,
             std::shared_ptr<IJackClientAPI> client_api,
             std::shared_ptr<IProcessRunner> process_runner);
+            std::shared_ptr<IAudioDeviceManager> device_manager = nullptr;
 
         /**
          * Destructor.
@@ -112,15 +117,37 @@ namespace aknet::jack {
          */
         bool owns_server() const;
 
+        /**
+         * Validate that the configured devices exist and are usable.
+         *
+         * Checks that:
+         * - Device IDs resolve to actual devices (or are "system_default")
+         * - Input device has input channels
+         * - Output device has output channels
+         *
+         * @param config Configuration to validate.
+         * @return Result indicating success or validation error.
+         */
+        Result validate_device_config(const ServerConfig& config);
+
     private:
         std::shared_ptr<log::Logger> logger_;
         std::shared_ptr<IJackClientAPI> client_api_;
         std::shared_ptr<IProcessRunner> process_runner_;
+        std::shared_ptr<IAudioDeviceManager> device_manager_;
 
         /**
          * PID if we started the server
         */
         std::optional<int> owned_server_pid_;
+
+        /**
+         * Configuration used to start the owned server.
+         *
+         * Only valid when owned_server_pid_ is set.
+         * Used to detect if config has changed and restart is needed.
+         */
+        std::optional<ServerConfig> last_server_config_;
 
         /**
          * Wait for the JACK server to be ready to accept connections.
@@ -131,6 +158,22 @@ namespace aknet::jack {
          * @return Result indicating success or timeout error.
          */
         Result wait_for_server_ready();
+
+        /**
+         * Build jackd command-line arguments from configuration.
+         *
+         * Constructs the argument vector for spawning jackd, including:
+         * - Realtime flag (-R)
+         * - CoreAudio driver selection (-d coreaudio)
+         * - Sample rate (-r)
+         * - Buffer size (-p)
+         * - Input device (-C) if not system_default
+         * - Output device (-P) if not system_default
+         *
+         * @param config Server configuration.
+         * @return Vector of command-line arguments.
+         */
+        std::vector<std::string> build_jackd_args(const ServerConfig& config);
 
     };
 

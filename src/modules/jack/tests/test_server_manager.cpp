@@ -136,7 +136,11 @@ TEST_CASE("Jack | ServerManager - Starting server when not running", "[jack][ser
         f.client_api->set_probe_result({0, 0, false});
         f.process_runner->set_spawn_result(false, 0);
 
-        jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256
+        };
 
         auto result = manager.ensure_server(config);
 
@@ -155,7 +159,11 @@ TEST_CASE("Jack | ServerManager - Server already running with correct settings",
 
         f.client_api->set_probe_result({48000, 256, true});  // Already running with target
 
-        jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256
+        };
 
         auto result = manager.ensure_server(config);
 
@@ -174,7 +182,11 @@ TEST_CASE("Jack | ServerManager - Server running with wrong settings", "[jack][s
 
         f.client_api->set_probe_result({44100, 256, true});  // Wrong sample rate
 
-        jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256
+        };
 
         auto result = manager.ensure_server(config, false);
 
@@ -191,7 +203,11 @@ TEST_CASE("Jack | ServerManager - Server running with wrong settings", "[jack][s
 
         f.client_api->set_probe_result({48000, 128, true});  // Wrong buffer
 
-        jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256
+        };
 
         auto result = manager.ensure_server(config, false);
 
@@ -207,7 +223,11 @@ TEST_CASE("Jack | ServerManager - Server running with wrong settings", "[jack][s
 
         f.client_api->set_probe_result({44100, 128, true});  // Wrong settings
 
-        jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256
+        };
 
         auto result = manager.ensure_server(config, true);
 
@@ -278,7 +298,11 @@ TEST_CASE("Jack | ServerManager - Stopping server", "[jack][server_manager]") {
             f.client_api->mark_server_ready();
         });
 
-        jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256
+        };
         manager.ensure_server(config);
         REQUIRE(manager.owns_server());
 
@@ -318,7 +342,11 @@ TEST_CASE("Jack | ServerManager - Stopping server", "[jack][server_manager]") {
                 f.client_api->mark_server_ready();
             });
 
-            jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
+            jack::ServerConfig config{
+                .executable_path = "/opt/homebrew/bin/jackd",
+                .sample_rate = 48000,
+                .buffer_size = 256
+            };
             manager.ensure_server(config);
             REQUIRE(manager.owns_server());
 
@@ -353,7 +381,11 @@ TEST_CASE("Jack | ServerManager - Ownership tracking", "[jack][server_manager]")
             f.client_api->mark_server_ready();
         });
 
-        jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256
+        };
         manager.ensure_server(config);
 
         CHECK(manager.owns_server());
@@ -365,7 +397,11 @@ TEST_CASE("Jack | ServerManager - Ownership tracking", "[jack][server_manager]")
 
         f.client_api->set_probe_result({48000, 256, true});  // Already running
 
-        jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256
+        };
         manager.ensure_server(config);
 
         CHECK_FALSE(manager.owns_server());
@@ -382,7 +418,11 @@ TEST_CASE("Jack | ServerManager - Ownership tracking", "[jack][server_manager]")
             f.client_api->mark_server_ready();
         });
 
-        jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256
+        };
         manager.ensure_server(config);
         REQUIRE(manager.owns_server());
 
@@ -406,7 +446,11 @@ TEST_CASE("Jack | ServerManager - Multiple ensure_server calls", "[jack][server_
             f.client_api->mark_server_ready();
         });
 
-        jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256
+        };
 
         auto result1 = manager.ensure_server(config);
         CHECK(result1.ok);
@@ -449,5 +493,238 @@ TEST_CASE("Jack | ServerManager - Multiple ensure_server calls", "[jack][server_
         CHECK(f.process_runner->get_terminate_calls().size() == 1);
     }
 
+}
+
+TEST_CASE("Jack | ServerManager - Device selection in jackd command", "[jack][server_manager]") {
+
+    SECTION("system_default for both devices omits -C and -P flags") {
+        JackServerManagerTestFixture f;
+        jack::JackServerManager manager(f.logger, f.client_api, f.process_runner);
+
+        f.client_api->set_probe_result({0, 0, false});
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
+        f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
+
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256,
+            .input_device_id = "system_default",
+            .output_device_id = "system_default"
+        };
+
+        auto result = manager.ensure_server(config);
+
+        REQUIRE(result.ok);
+
+        auto spawn_calls = f.process_runner->get_spawn_calls();
+        REQUIRE(spawn_calls.size() == 1);
+
+        std::string args = spawn_calls[0].args_string();
+
+        // Should NOT contain device selection flags
+        CHECK_THAT(args, !Catch::Matchers::ContainsSubstring("-C"));
+        CHECK_THAT(args, !Catch::Matchers::ContainsSubstring("-P"));
+
+        // Should contain standard flags
+        CHECK_THAT(args, Catch::Matchers::ContainsSubstring("-R"));
+        CHECK_THAT(args, Catch::Matchers::ContainsSubstring("-d coreaudio"));
+    }
+
+    SECTION("specific input device adds -C flag") {
+        JackServerManagerTestFixture f;
+        jack::JackServerManager manager(f.logger, f.client_api, f.process_runner);
+
+        f.client_api->set_probe_result({0, 0, false});
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
+        f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
+
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256,
+            .input_device_id = "Built-in Microphone",
+            .output_device_id = "system_default"
+        };
+
+        auto result = manager.ensure_server(config);
+
+        REQUIRE(result.ok);
+
+        auto spawn_calls = f.process_runner->get_spawn_calls();
+        REQUIRE(spawn_calls.size() == 1);
+
+        std::string args = spawn_calls[0].args_string();
+
+        // Should contain -C with device name
+        CHECK_THAT(args, Catch::Matchers::ContainsSubstring("-C"));
+        CHECK_THAT(args, Catch::Matchers::ContainsSubstring("Built-in Microphone"));
+
+        // Should NOT contain -P (output is default)
+        CHECK_THAT(args, !Catch::Matchers::ContainsSubstring("-P"));
+    }
+
+    SECTION("specific output device adds -P flag") {
+        JackServerManagerTestFixture f;
+        jack::JackServerManager manager(f.logger, f.client_api, f.process_runner);
+
+        f.client_api->set_probe_result({0, 0, false});
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
+        f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
+
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256,
+            .input_device_id = "system_default",
+            .output_device_id = "Built-in Output"
+        };
+
+        auto result = manager.ensure_server(config);
+
+        REQUIRE(result.ok);
+
+        auto spawn_calls = f.process_runner->get_spawn_calls();
+        REQUIRE(spawn_calls.size() == 1);
+
+        std::string args = spawn_calls[0].args_string();
+
+        // Should contain -P with device name
+        CHECK_THAT(args, Catch::Matchers::ContainsSubstring("-P"));
+        CHECK_THAT(args, Catch::Matchers::ContainsSubstring("Built-in Output"));
+
+        // Should NOT contain -C (input is default)
+        CHECK_THAT(args, !Catch::Matchers::ContainsSubstring("-C"));
+    }
+
+    SECTION("different input and output devices add both -C and -P flags") {
+        JackServerManagerTestFixture f;
+        jack::JackServerManager manager(f.logger, f.client_api, f.process_runner);
+
+        f.client_api->set_probe_result({0, 0, false});
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
+        f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
+
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256,
+            .input_device_id = "USB Audio Interface",
+            .output_device_id = "Built-in Output"
+        };
+
+        auto result = manager.ensure_server(config);
+
+        REQUIRE(result.ok);
+
+        auto spawn_calls = f.process_runner->get_spawn_calls();
+        REQUIRE(spawn_calls.size() == 1);
+
+        std::string args = spawn_calls[0].args_string();
+
+        // Should contain both flags
+        CHECK_THAT(args, Catch::Matchers::ContainsSubstring("-C"));
+        CHECK_THAT(args, Catch::Matchers::ContainsSubstring("USB Audio Interface"));
+        CHECK_THAT(args, Catch::Matchers::ContainsSubstring("-P"));
+        CHECK_THAT(args, Catch::Matchers::ContainsSubstring("Built-in Output"));
+    }
+
+    SECTION("device names with spaces are properly handled") {
+        JackServerManagerTestFixture f;
+        jack::JackServerManager manager(f.logger, f.client_api, f.process_runner);
+
+        f.client_api->set_probe_result({0, 0, false});
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
+        f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
+
+        jack::ServerConfig config{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256,
+            .input_device_id = "External Headphones",
+            .output_device_id = "system_default"
+        };
+
+        auto result = manager.ensure_server(config);
+
+        REQUIRE(result.ok);
+
+        auto spawn_calls = f.process_runner->get_spawn_calls();
+        REQUIRE(spawn_calls.size() == 1);
+
+        std::string args = spawn_calls[0].args_string();
+
+        // Device name with space should be passed as single argument
+        CHECK_THAT(args, Catch::Matchers::ContainsSubstring("External Headphones"));
+    }
+
+    SECTION("restarting server with different devices updates command") {
+        JackServerManagerTestFixture f;
+        jack::JackServerManager manager(f.logger, f.client_api, f.process_runner);
+
+        // Start with system default
+        f.client_api->set_probe_result({0, 0, false});
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
+        f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
+
+        jack::ServerConfig config1{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256,
+            .input_device_id = "system_default",
+            .output_device_id = "system_default"
+        };
+
+        manager.ensure_server(config1);
+
+        // Now restart with specific devices
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
+        f.process_runner->set_spawn_result(true, 5678);
+
+        jack::ServerConfig config2{
+            .executable_path = "/opt/homebrew/bin/jackd",
+            .sample_rate = 48000,
+            .buffer_size = 256,
+            .input_device_id = "USB Microphone",
+            .output_device_id = "HDMI Audio"
+        };
+
+        auto result = manager.ensure_server(config2);
+
+        REQUIRE(result.ok);
+
+        auto spawn_calls = f.process_runner->get_spawn_calls();
+        REQUIRE(spawn_calls.size() == 2);
+
+        // First call: no device flags
+        std::string args1 = spawn_calls[0].args_string();
+        CHECK_THAT(args1, !Catch::Matchers::ContainsSubstring("-C"));
+        CHECK_THAT(args1, !Catch::Matchers::ContainsSubstring("-P"));
+
+        // Second call: both device flags
+        std::string args2 = spawn_calls[1].args_string();
+        CHECK_THAT(args2, Catch::Matchers::ContainsSubstring("-C"));
+        CHECK_THAT(args2, Catch::Matchers::ContainsSubstring("USB Microphone"));
+        CHECK_THAT(args2, Catch::Matchers::ContainsSubstring("-P"));
+        CHECK_THAT(args2, Catch::Matchers::ContainsSubstring("HDMI Audio"));
+    }
 }
 

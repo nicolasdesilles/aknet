@@ -26,6 +26,7 @@
 
 
 namespace aknet::test {
+    class MockAudioDeviceManager;
 
     namespace fs = std::filesystem;
 
@@ -231,7 +232,7 @@ namespace aknet::test {
         }
 
         // Public for test access
-        jack::JackProcessCallback process_callback_;  // ← Qualified!
+        jack::JackProcessCallback process_callback_;
         void* process_callback_arg_ = nullptr;
 
         int get_probe_call_count() const { return probe_call_count_; }
@@ -296,6 +297,7 @@ namespace aknet::test {
         std::shared_ptr<log::Logger> logger;
         std::shared_ptr<MockJackClientAPI> client_api;
         std::shared_ptr<MockProcessRunner> process_runner;
+        std::shared_ptr<MockAudioDeviceManager> device_manager;
         TempDir temp_dir;
         settings::AppSettings settings;
 
@@ -304,6 +306,7 @@ namespace aknet::test {
             logger = log::get("jack_module_test");
             client_api = std::make_shared<MockJackClientAPI>();
             process_runner = std::make_shared<MockProcessRunner>();
+            device_manager = std::make_shared<MockAudioDeviceManager>();
 
             // Setup default settings
             settings.jack.client_name = "aknet_test";

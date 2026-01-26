@@ -11,6 +11,7 @@
 #include "jack_server_manager.h"
 #include "jack_client.h"
 #include "jack_audio_processor.h"
+#include "audio_device_manager.h"
 
 #include <logger.h>
 #include <settings.h>
@@ -95,7 +96,8 @@ namespace aknet::jack {
         Result init(
             const settings::AppSettings& settings,
             std::shared_ptr<IProcessRunner> process_runner = nullptr,
-            std::shared_ptr<IJackClientAPI> client_api = nullptr
+            std::shared_ptr<IJackClientAPI> client_api = nullptr,
+            std::shared_ptr<IAudioDeviceManager> device_manager = nullptr
         );
 
         /**
@@ -177,9 +179,28 @@ namespace aknet::jack {
         std::unique_ptr<JackServerManager> server_manager_;
         std::unique_ptr<JackClient> client_;
         std::shared_ptr<JackAudioProcessor> audio_processor_;
+        std::shared_ptr<IAudioDeviceManager> device_manager_;
 
         // Settings cache
         settings::AppSettings settings_;
+
+        /**
+         * Validate that audio devices in settings exist and are usable.
+         *
+         * Checks that:
+         * - Device IDs resolve to actual devices (or are "system_default")
+         * - Input device has input capability
+         * - Output device has output capability
+         *
+         * @param[in,out] settings Settings to validate (may be modified on fallback).
+         * @param fallback_to_default If true, fall back to system_default on missing devices.
+         *
+         * @return Result indicating success or validation error.
+         */
+        Result validate_and_fallback_devices(
+            settings::AppSettings& settings,
+            bool fallback_to_default = true
+        );
     };
 
 }

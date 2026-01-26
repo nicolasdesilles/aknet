@@ -1314,3 +1314,380 @@ TEST_CASE("Settings | Concurrency", "[settings]") {
         log::shutdown();
     }
 }
+
+// ------------------------------------------------------------------------------------------------
+// Audio Device Settings Tests
+// ------------------------------------------------------------------------------------------------
+
+TEST_CASE("Settings | Audio Device Fields", "[settings]") {
+
+    SECTION("default settings include system_default for device IDs") {
+        settings::AppSettings defaults{};
+
+        CHECK(defaults.audio.input_device_id == "system_default");
+        CHECK(defaults.audio.output_device_id == "system_default");
+    }
+
+    SECTION("device IDs can be set to specific device names") {
+        settings::AppSettings settings{};
+
+        settings.audio.input_device_id = "Built-in Microphone";
+        settings.audio.output_device_id = "Built-in Output";
+
+        CHECK(settings.audio.input_device_id == "Built-in Microphone");
+        CHECK(settings.audio.output_device_id == "Built-in Output");
+    }
+
+    SECTION("device IDs can be different from each other") {
+        settings::AppSettings settings{};
+
+        settings.audio.input_device_id = "USB Audio Interface";
+        settings.audio.output_device_id = "Built-in Output";
+
+        CHECK(settings.audio.input_device_id != settings.audio.output_device_id);
+    }
+}
+
+TEST_CASE("Settings | Audio Device JSON Serialization", "[settings]") {
+
+    SECTION("device IDs serialize to JSON") {
+        settings::AppSettings settings{};
+        settings.audio.input_device_id = "Test Input Device";
+        settings.audio.output_device_id = "Test Output Device";
+
+        std::string json_str = settings::to_json_string(settings);
+
+        CHECK_THAT(json_str, Catch::Matchers::ContainsSubstring("input_device_id"));
+        CHECK_THAT(json_str, Catch::Matchers::ContainsSubstring("output_device_id"));
+        CHECK_THAT(json_str, Catch::Matchers::ContainsSubstring("Test Input Device"));
+        CHECK_THAT(json_str, Catch::Matchers::ContainsSubstring("Test Output Device"));
+    }
+
+    SECTION("device IDs deserialize from JSON") {
+        const std::string json_str = R"({
+            "schema_version": 1,
+            "general": {"log_level": "debug"},
+            "audio": {
+                "sampling_rate": 48000,
+                "buffer_size": 256,
+                "num_channels": 8,
+                "input_device_id": "My Input Device",
+                "output_device_id": "My Output Device"
+            },
+            "jack": {
+                "client_name": "aknet",
+                "server_executable_path": "/opt/homebrew/bin/jackd",
+                "auto_manage_server": false
+            }
+        })";
+
+        settings::AppSettings settings{};
+        auto result = settings::from_json_string(json_str, settings);
+
+        REQUIRE(result.ok);
+        CHECK(settings.audio.input_device_id == "My Input Device");
+        CHECK(settings.audio.output_device_id == "My Output Device");
+    }
+
+    SECTION("missing device IDs in JSON default to system_default") {
+        const std::string json_str = R"({
+            "schema_version": 1,
+            "audio": {
+                "sampling_rate": 48000,
+                "buffer_size": 256,
+                "num_channels": 8
+            }
+        })";
+
+        settings::AppSettings settings{};
+        auto result = settings::from_json_string(json_str, settings);
+
+        REQUIRE(result.ok);
+        CHECK(settings.audio.input_device_id == "system_default");
+        CHECK(settings.audio.output_device_id == "system_default");
+    }
+
+    SECTION("JSON roundtrip preserves device IDs") {
+        settings::AppSettings original{};
+        original.audio.input_device_id = "Focusrite Scarlett";
+        original.audio.output_device_id = "Built-in Output";
+
+        std::string json_str = settings::to_json_string(original);
+
+        settings::AppSettings deserialized{};
+        auto result = settings::from_json_string(json_str, deserialized);
+
+        REQUIRE(result.ok);
+        CHECK(deserialized.audio.input_device_id == original.audio.input_device_id);
+        CHECK(deserialized.audio.output_device_id == original.audio.output_device_id);
+    }
+}
+
+TEST_CASE("Settings | Audio Device File Persistence", "[settings]") {
+
+    SECTION("device IDs are saved to and loaded from file") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        settings::SettingsConfig config{
+            .base_dir = temp_dir.path(),
+            .file_name = "test_devices.json",
+            .schema_version = 1
+        };
+
+        // Save settings with custom device IDs
+        {
+            settings::Settings settings;
+            settings.init(logger, config);
+            settings.load_or_create();
+
+            settings.stage([](settings::AppSettings& s) {
+                s.audio.input_device_id = "USB Microphone";
+                s.audio.output_device_id = "HDMI Audio";
+            });
+
+            auto save_result = settings.save();
+            REQUIRE(save_result.result.ok);
+
+            settings.shutdown();
+        }
+
+        // Load settings and verify device IDs persisted
+        {
+            settings::Settings settings;
+            settings.init(logger, config);
+            settings.load_or_create();
+
+            auto snapshot = settings.snapshot();
+            CHECK(snapshot->audio.input_device_id == "USB Microphone");
+            CHECK(snapshot->audio.output_device_id == "HDMI Audio");
+
+            settings.shutdown();
+        }
+
+        log::shutdown();
+    }
+
+    SECTION("legacy settings file without device IDs loads with defaults") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        // Create a legacy settings file without device_id fields
+        fs::path settings_path = temp_dir.path() / "legacy.json";
+        {
+            std::ofstream file(settings_path);
+            file << R"({
+                "schema_version": 1,
+                "general": {"log_level": "info"},
+                "audio": {
+                    "sampling_rate": 44100,
+                    "buffer_size": 512,
+                    "num_channels": 2
+                },
+                "jack": {
+                    "client_name": "aknet",
+                    "server_executable_path": "/opt/homebrew/bin/jackd",
+                    "auto_manage_server": false
+                }
+            })";
+        }
+
+        settings::SettingsConfig config{
+            .base_dir = temp_dir.path(),
+            .file_name = "legacy.json",
+            .schema_version = 1
+        };
+
+        settings::Settings settings;
+        settings.init(logger, config);
+        auto result = settings.load_or_create();
+
+        REQUIRE(result.ok);
+
+        auto snapshot = settings.snapshot();
+        CHECK(snapshot->audio.sampling_rate == 44100);
+        CHECK(snapshot->audio.buffer_size == 512);
+        CHECK(snapshot->audio.num_channels == 2);
+
+        // Device IDs should default to system_default
+        CHECK(snapshot->audio.input_device_id == "system_default");
+        CHECK(snapshot->audio.output_device_id == "system_default");
+
+        settings.shutdown();
+        log::shutdown();
+    }
+}
+
+TEST_CASE("Settings | Audio Device Restart Impact", "[settings]") {
+
+    SECTION("changing input_device_id triggers jack module restart") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        settings::SettingsConfig config{
+            .base_dir = temp_dir.path(),
+            .file_name = "test_restart.json",
+            .schema_version = 1
+        };
+
+        settings::Settings settings;
+        settings.init(logger, config);
+        settings.load_or_create();
+
+        // Register restart rule for input device
+        settings.add_restart_rule({
+            .key = "audio.input_device_id",
+            .requires_app_restart = false,
+            .module_name_to_restart = "jack"
+        });
+
+        // Change the device
+        settings.stage([](settings::AppSettings& s) {
+            s.audio.input_device_id = "New Input Device";
+        });
+
+        auto save_result = settings.save();
+
+        REQUIRE(save_result.result.ok);
+        CHECK_FALSE(save_result.save_impact.app_restart_required);
+        REQUIRE(save_result.save_impact.modules_restart_required.size() == 1);
+        CHECK(save_result.save_impact.modules_restart_required[0] == "jack");
+
+        CHECK_THAT(
+            save_result.save_impact.restart_sensitive_keys_changed,
+            Catch::Matchers::VectorContains(std::string("audio.input_device_id"))
+        );
+
+        settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("changing output_device_id triggers jack module restart") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        settings::SettingsConfig config{
+            .base_dir = temp_dir.path(),
+            .file_name = "test_restart.json",
+            .schema_version = 1
+        };
+
+        settings::Settings settings;
+        settings.init(logger, config);
+        settings.load_or_create();
+
+        // Register restart rule for output device
+        settings.add_restart_rule({
+            .key = "audio.output_device_id",
+            .requires_app_restart = false,
+            .module_name_to_restart = "jack"
+        });
+
+        // Change the device
+        settings.stage([](settings::AppSettings& s) {
+            s.audio.output_device_id = "New Output Device";
+        });
+
+        auto save_result = settings.save();
+
+        REQUIRE(save_result.result.ok);
+        CHECK_FALSE(save_result.save_impact.app_restart_required);
+        REQUIRE(save_result.save_impact.modules_restart_required.size() == 1);
+        CHECK(save_result.save_impact.modules_restart_required[0] == "jack");
+
+        CHECK_THAT(
+            save_result.save_impact.restart_sensitive_keys_changed,
+            Catch::Matchers::VectorContains(std::string("audio.output_device_id"))
+        );
+
+        settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("changing both device IDs triggers single jack restart") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        settings::SettingsConfig config{
+            .base_dir = temp_dir.path(),
+            .file_name = "test_restart.json",
+            .schema_version = 1
+        };
+
+        settings::Settings settings;
+        settings.init(logger, config);
+        settings.load_or_create();
+
+        settings.add_restart_rule({
+            .key = "audio.input_device_id",
+            .requires_app_restart = false,
+            .module_name_to_restart = "jack"
+        });
+        settings.add_restart_rule({
+            .key = "audio.output_device_id",
+            .requires_app_restart = false,
+            .module_name_to_restart = "jack"
+        });
+
+        // Change both devices
+        settings.stage([](settings::AppSettings& s) {
+            s.audio.input_device_id = "New Input";
+            s.audio.output_device_id = "New Output";
+        });
+
+        auto save_result = settings.save();
+
+        REQUIRE(save_result.result.ok);
+
+        // Should only list "jack" once (not duplicated)
+        CHECK(save_result.save_impact.modules_restart_required.size() == 1);
+        CHECK(save_result.save_impact.modules_restart_required[0] == "jack");
+
+        // Both keys should be listed as changed
+        CHECK(save_result.save_impact.restart_sensitive_keys_changed.size() == 2);
+
+        settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("changing to same device ID does not trigger restart") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        settings::SettingsConfig config{
+            .base_dir = temp_dir.path(),
+            .file_name = "test_no_restart.json",
+            .schema_version = 1
+        };
+
+        settings::Settings settings;
+        settings.init(logger, config);
+        settings.load_or_create();
+
+        settings.add_restart_rule({
+            .key = "audio.input_device_id",
+            .requires_app_restart = false,
+            .module_name_to_restart = "jack"
+        });
+
+        // "Change" to the same value (no actual change)
+        settings.stage([](settings::AppSettings& s) {
+            s.audio.input_device_id = "system_default";  // Already the default
+        });
+
+        auto save_result = settings.save();
+
+        REQUIRE(save_result.result.ok);
+        CHECK(save_result.save_impact.modules_restart_required.empty());
+        CHECK(save_result.save_impact.restart_sensitive_keys_changed.empty());
+
+        settings.shutdown();
+        log::shutdown();
+    }
+}

@@ -54,7 +54,8 @@ struct RegisterJackClientStepTestFixture {
         jack_module = std::make_shared<jack::JackModule>(logger_jack);
 
         // Initialize module with mocks
-        jack_module->init(*settings->snapshot(), process_runner, client_api);
+        auto device_manager = std::make_shared<MockAudioDeviceManager>();
+        jack_module->init(*settings->snapshot(), process_runner, client_api, device_manager);
     }
 
     ~RegisterJackClientStepTestFixture() {
