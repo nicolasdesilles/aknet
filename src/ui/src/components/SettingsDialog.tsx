@@ -5,6 +5,8 @@ import { Settings } from "lucide-react";
 import { AudioDeviceSelect } from "./AudioDeviceSelect";
 
 import type { AppSettings, SaveResult, Result } from "@/types/settings";
+import { VALID_SAMPLE_RATES, VALID_BUFFER_SIZES } from "@/types/settings";
+import { formatSampleRate, formatBufferSize } from "@/lib/audio";
 
 import {
   Dialog,
@@ -17,6 +19,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface SettingsDialogProps {
   disabled?: boolean;
@@ -160,35 +169,47 @@ export function SettingsDialog({ disabled = false }: SettingsDialogProps) {
               <div className="grid gap-3">
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">
-                    Sample Rate (Hz)
+                    Sample Rate
                   </label>
-                  <Input
-                    type="number"
-                    value={pending.audio.sampling_rate}
-                    onChange={(e) =>
-                      handleChange(
-                        "audio",
-                        "sampling_rate",
-                        parseInt(e.target.value),
-                      )
+                  <Select
+                    value={pending.audio.sampling_rate.toString()}
+                    onValueChange={(value) =>
+                      handleChange("audio", "sampling_rate", parseInt(value))
                     }
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VALID_SAMPLE_RATES.map((rate) => (
+                        <SelectItem key={rate} value={rate.toString()}>
+                          {formatSampleRate(rate)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">
-                    Buffer Size (samples)
+                    Buffer Size
                   </label>
-                  <Input
-                    type="number"
-                    value={pending.audio.buffer_size}
-                    onChange={(e) =>
-                      handleChange(
-                        "audio",
-                        "buffer_size",
-                        parseInt(e.target.value),
-                      )
+                  <Select
+                    value={pending.audio.buffer_size.toString()}
+                    onValueChange={(value) =>
+                      handleChange("audio", "buffer_size", parseInt(value))
                     }
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VALID_BUFFER_SIZES.map((size) => (
+                        <SelectItem key={size} value={size.toString()}>
+                          {formatBufferSize(size)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">

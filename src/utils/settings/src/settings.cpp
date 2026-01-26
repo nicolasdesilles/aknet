@@ -76,6 +76,56 @@ namespace aknet::settings {
     }
 
     // -------------------------------------------------------------------------
+    // Audio Settings Validation
+    // -------------------------------------------------------------------------
+
+    bool is_valid_sample_rate(int rate) {
+        return std::find(VALID_SAMPLE_RATES.begin(), VALID_SAMPLE_RATES.end(), rate) != VALID_SAMPLE_RATES.end();
+    }
+
+    bool is_valid_buffer_size(int size) {
+        return std::find(VALID_BUFFER_SIZES.begin(), VALID_BUFFER_SIZES.end(), size) != VALID_BUFFER_SIZES.end();
+    }
+
+    int find_nearest_sample_rate(int rate) {
+        if (VALID_SAMPLE_RATES.empty()) {
+            return 48000; // Fallback default
+        }
+
+        int nearest = VALID_SAMPLE_RATES[0];
+        int min_diff = std::abs(rate - nearest);
+
+        for (int valid_rate : VALID_SAMPLE_RATES) {
+            int diff = std::abs(rate - valid_rate);
+            if (diff < min_diff) {
+                min_diff = diff;
+                nearest = valid_rate;
+            }
+        }
+
+        return nearest;
+    }
+
+    int find_nearest_buffer_size(int size) {
+        if (VALID_BUFFER_SIZES.empty()) {
+            return 256; // Fallback default
+        }
+
+        int nearest = VALID_BUFFER_SIZES[0];
+        int min_diff = std::abs(size - nearest);
+
+        for (int valid_size : VALID_BUFFER_SIZES) {
+            int diff = std::abs(size - valid_size);
+            if (diff < min_diff) {
+                min_diff = diff;
+                nearest = valid_size;
+            }
+        }
+
+        return nearest;
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
@@ -340,6 +390,34 @@ namespace aknet::settings {
             if (loaded_settings.schema_version != config_.schema_version) {
                 logger_->warn("Settings file {} schema version mismatch ({} != {})", settings_file_path.string(), loaded_settings.schema_version, defaults_.schema_version);
             }
+
+            // Enforce validation on loaded values - auto-correct if needed
+            bool corrected = false;
+            
+            if (!is_valid_sample_rate(loaded_settings.audio.sampling_rate)) {
+                int old_rate = loaded_settings.audio.sampling_rate;
+                loaded_settings.audio.sampling_rate = find_nearest_sample_rate(old_rate);
+                logger_->warn("Corrected invalid sample rate {} Hz to {} Hz", old_rate, loaded_settings.audio.sampling_rate);
+                corrected = true;
+            }
+            
+            if (!is_valid_buffer_size(loaded_settings.audio.buffer_size)) {
+                int old_size = loaded_settings.audio.buffer_size;
+                loaded_settings.audio.buffer_size = find_nearest_buffer_size(old_size);
+                logger_->warn("Corrected invalid buffer size {} samples to {} samples", old_size, loaded_settings.audio.buffer_size);
+                corrected = true;
+            }
+            
+            // If we corrected values, save the file immediately
+            if (corrected) {
+                Result save_result = to_json_file(settings_file_path, loaded_settings);
+                if (save_result.ok) {
+                    logger_->info("Saved corrected settings to file");
+                } else {
+                    logger_->warn("Could not save corrected settings: {}", save_result.error);
+                }
+            }
+
             snapshot_ = std::make_shared<const AppSettings>(loaded_settings);
             pending_ = *snapshot_;
             logger_->info("Settings loaded successfully");
@@ -371,7 +449,37 @@ namespace aknet::settings {
 
     Result Settings::stage(std::function<void(AppSettings &)> mutator) {
         std::lock_guard lock(pending_mutex_);
-        mutator(pending_);
+        
+        // Create a temporary copy to validate before applying
+        AppSettings temp = pending_;
+        mutator(temp);
+        
+        // Validate sample rate
+        if (!is_valid_sample_rate(temp.audio.sampling_rate)) {
+            std::ostringstream oss;
+            oss << "Invalid sample rate: " << temp.audio.sampling_rate 
+                << ". Must be one of: ";
+            for (size_t i = 0; i < VALID_SAMPLE_RATES.size(); ++i) {
+                if (i > 0) oss << ", ";
+                oss << VALID_SAMPLE_RATES[i];
+            }
+            return Result{.ok = false, .error = oss.str()};
+        }
+        
+        // Validate buffer size
+        if (!is_valid_buffer_size(temp.audio.buffer_size)) {
+            std::ostringstream oss;
+            oss << "Invalid buffer size: " << temp.audio.buffer_size 
+                << ". Must be one of: ";
+            for (size_t i = 0; i < VALID_BUFFER_SIZES.size(); ++i) {
+                if (i > 0) oss << ", ";
+                oss << VALID_BUFFER_SIZES[i];
+            }
+            return Result{.ok = false, .error = oss.str()};
+        }
+        
+        // If validation passes, apply the changes
+        pending_ = temp;
         return Result{.ok = true};
     }
 

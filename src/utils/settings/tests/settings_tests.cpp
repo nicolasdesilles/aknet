@@ -578,7 +578,8 @@ TEST_CASE("Settings | Load from file or Create", "[settings]") {
         auto test_logger = log::get("settings");
 
         // schema_version intentionally mismatched
-        const std::string test_json_string = R"({"audio":{"buffer_size":1024,"sampling_rate":32000},"general":{"log_level":"info"},"schema_version":999})";
+        // Use valid audio values to avoid triggering validation auto-correction
+        const std::string test_json_string = R"({"audio":{"buffer_size":1024,"sampling_rate":96000},"general":{"log_level":"info"},"schema_version":999})";
 
         auto test_file_path = temp_dir.path() / "aknet_test_settings.json";
         std::ofstream out_file(test_file_path);
@@ -601,7 +602,7 @@ TEST_CASE("Settings | Load from file or Create", "[settings]") {
         auto snapshot = test_settings.snapshot();
         REQUIRE(snapshot != nullptr);
         REQUIRE(snapshot->general.log_level == "info");
-        REQUIRE(snapshot->audio.sampling_rate == 32000);
+        REQUIRE(snapshot->audio.sampling_rate == 96000);
         REQUIRE(snapshot->audio.buffer_size == 1024);
         REQUIRE(snapshot->schema_version == 999);
 
@@ -865,10 +866,10 @@ TEST_CASE("Settings | Import and Export", "[settings]") {
         REQUIRE(exported.general.log_level == "trace");
         REQUIRE(exported.audio.sampling_rate == 44100);
 
-        // Prepare an import file with different values
+        // Prepare an import file with different values (using valid audio values)
         settings::AppSettings to_import{};
         to_import.general.log_level = "info";
-        to_import.audio.sampling_rate = 32000;
+        to_import.audio.sampling_rate = 96000;
         to_import.audio.buffer_size = 1024;
 
         const fs::path import_path = temp_dir.path() / "import_settings.json";
@@ -883,7 +884,7 @@ TEST_CASE("Settings | Import and Export", "[settings]") {
 
         auto pending = test_settings.pending_copy();
         REQUIRE(pending.general.log_level == "info");
-        REQUIRE(pending.audio.sampling_rate == 32000);
+        REQUIRE(pending.audio.sampling_rate == 96000);
         REQUIRE(pending.audio.buffer_size == 1024);
 
         // Save applies import to active + persists to main settings path
@@ -894,13 +895,13 @@ TEST_CASE("Settings | Import and Export", "[settings]") {
         REQUIRE_FALSE(test_settings.has_pending_changes());
 
         REQUIRE(test_settings.snapshot()->general.log_level == "info");
-        REQUIRE(test_settings.snapshot()->audio.sampling_rate == 32000);
+        REQUIRE(test_settings.snapshot()->audio.sampling_rate == 96000);
         REQUIRE(test_settings.snapshot()->audio.buffer_size == 1024);
 
         settings::AppSettings disk_settings{};
         REQUIRE(settings::from_json_file(test_settings.path(), disk_settings).ok);
         REQUIRE(disk_settings.general.log_level == "info");
-        REQUIRE(disk_settings.audio.sampling_rate == 32000);
+        REQUIRE(disk_settings.audio.sampling_rate == 96000);
         REQUIRE(disk_settings.audio.buffer_size == 1024);
 
         test_settings.shutdown();
@@ -1311,6 +1312,487 @@ TEST_CASE("Settings | Concurrency", "[settings]") {
         CHECK(done.load(std::memory_order_relaxed));
 
         test_settings.shutdown();
+        log::shutdown();
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Audio Settings Validation Tests
+// ------------------------------------------------------------------------------------------------
+
+TEST_CASE("Settings | Sample Rate Validation", "[settings][validation]") {
+
+    SECTION("is_valid_sample_rate accepts all valid sample rates") {
+        CHECK(settings::is_valid_sample_rate(44100));
+        CHECK(settings::is_valid_sample_rate(48000));
+        CHECK(settings::is_valid_sample_rate(88200));
+        CHECK(settings::is_valid_sample_rate(96000));
+        CHECK(settings::is_valid_sample_rate(176400));
+        CHECK(settings::is_valid_sample_rate(192000));
+    }
+
+    SECTION("is_valid_sample_rate rejects invalid sample rates") {
+        CHECK_FALSE(settings::is_valid_sample_rate(0));
+        CHECK_FALSE(settings::is_valid_sample_rate(8000));
+        CHECK_FALSE(settings::is_valid_sample_rate(22050));
+        CHECK_FALSE(settings::is_valid_sample_rate(32000));
+        CHECK_FALSE(settings::is_valid_sample_rate(47999));
+        CHECK_FALSE(settings::is_valid_sample_rate(48001));
+        CHECK_FALSE(settings::is_valid_sample_rate(50000));
+        CHECK_FALSE(settings::is_valid_sample_rate(384000));
+        CHECK_FALSE(settings::is_valid_sample_rate(-1));
+        CHECK_FALSE(settings::is_valid_sample_rate(1000000));
+    }
+
+    SECTION("find_nearest_sample_rate returns exact match for valid rates") {
+        CHECK(settings::find_nearest_sample_rate(44100) == 44100);
+        CHECK(settings::find_nearest_sample_rate(48000) == 48000);
+        CHECK(settings::find_nearest_sample_rate(96000) == 96000);
+        CHECK(settings::find_nearest_sample_rate(192000) == 192000);
+    }
+
+    SECTION("find_nearest_sample_rate rounds to nearest valid rate") {
+        CHECK(settings::find_nearest_sample_rate(40000) == 44100);
+        CHECK(settings::find_nearest_sample_rate(45000) == 44100);
+        CHECK(settings::find_nearest_sample_rate(46000) == 44100);
+        CHECK(settings::find_nearest_sample_rate(47000) == 48000);
+        CHECK(settings::find_nearest_sample_rate(50000) == 48000);
+        CHECK(settings::find_nearest_sample_rate(90000) == 88200);
+        CHECK(settings::find_nearest_sample_rate(92000) == 88200);
+        CHECK(settings::find_nearest_sample_rate(93000) == 96000);
+        CHECK(settings::find_nearest_sample_rate(180000) == 176400);
+        CHECK(settings::find_nearest_sample_rate(200000) == 192000);
+    }
+
+    SECTION("find_nearest_sample_rate handles edge cases") {
+        CHECK(settings::find_nearest_sample_rate(0) == 44100);
+        CHECK(settings::find_nearest_sample_rate(1) == 44100);
+        CHECK(settings::find_nearest_sample_rate(500000) == 192000);
+        CHECK(settings::find_nearest_sample_rate(-100) == 44100);
+    }
+}
+
+TEST_CASE("Settings | Buffer Size Validation", "[settings][validation]") {
+
+    SECTION("is_valid_buffer_size accepts all valid buffer sizes") {
+        CHECK(settings::is_valid_buffer_size(32));
+        CHECK(settings::is_valid_buffer_size(64));
+        CHECK(settings::is_valid_buffer_size(128));
+        CHECK(settings::is_valid_buffer_size(256));
+        CHECK(settings::is_valid_buffer_size(512));
+        CHECK(settings::is_valid_buffer_size(1024));
+        CHECK(settings::is_valid_buffer_size(2048));
+    }
+
+    SECTION("is_valid_buffer_size rejects invalid buffer sizes") {
+        CHECK_FALSE(settings::is_valid_buffer_size(0));
+        CHECK_FALSE(settings::is_valid_buffer_size(1));
+        CHECK_FALSE(settings::is_valid_buffer_size(16));
+        CHECK_FALSE(settings::is_valid_buffer_size(31));
+        CHECK_FALSE(settings::is_valid_buffer_size(33));
+        CHECK_FALSE(settings::is_valid_buffer_size(100));
+        CHECK_FALSE(settings::is_valid_buffer_size(255));
+        CHECK_FALSE(settings::is_valid_buffer_size(257));
+        CHECK_FALSE(settings::is_valid_buffer_size(4096)); // Above max
+        CHECK_FALSE(settings::is_valid_buffer_size(8192)); // Above max
+        CHECK_FALSE(settings::is_valid_buffer_size(-1));
+    }
+
+    SECTION("find_nearest_buffer_size returns exact match for valid sizes") {
+        CHECK(settings::find_nearest_buffer_size(32) == 32);
+        CHECK(settings::find_nearest_buffer_size(64) == 64);
+        CHECK(settings::find_nearest_buffer_size(128) == 128);
+        CHECK(settings::find_nearest_buffer_size(256) == 256);
+        CHECK(settings::find_nearest_buffer_size(512) == 512);
+        CHECK(settings::find_nearest_buffer_size(1024) == 1024);
+        CHECK(settings::find_nearest_buffer_size(2048) == 2048);
+    }
+
+    SECTION("find_nearest_buffer_size rounds to nearest valid size") {
+        CHECK(settings::find_nearest_buffer_size(20) == 32);
+        CHECK(settings::find_nearest_buffer_size(40) == 32);
+        CHECK(settings::find_nearest_buffer_size(48) == 32);  // Equidistant, picks lower
+        CHECK(settings::find_nearest_buffer_size(50) == 64);
+        CHECK(settings::find_nearest_buffer_size(100) == 128);
+        CHECK(settings::find_nearest_buffer_size(200) == 256);
+        CHECK(settings::find_nearest_buffer_size(300) == 256);
+        CHECK(settings::find_nearest_buffer_size(400) == 512);
+        CHECK(settings::find_nearest_buffer_size(768) == 512);  // Closer to 512
+        CHECK(settings::find_nearest_buffer_size(900) == 1024);
+        CHECK(settings::find_nearest_buffer_size(1500) == 1024); // Closer to 1024
+        CHECK(settings::find_nearest_buffer_size(1536) == 1024); // Equidistant, picks lower
+        CHECK(settings::find_nearest_buffer_size(1600) == 2048);
+        CHECK(settings::find_nearest_buffer_size(3000) == 2048);
+    }
+
+    SECTION("find_nearest_buffer_size handles edge cases") {
+        CHECK(settings::find_nearest_buffer_size(0) == 32);
+        CHECK(settings::find_nearest_buffer_size(1) == 32);
+        CHECK(settings::find_nearest_buffer_size(10000) == 2048); // Clamps to max
+        CHECK(settings::find_nearest_buffer_size(-100) == 32);
+    }
+
+    SECTION("maximum buffer size is 2048") {
+        // Verify that 4096 is NOT valid (as per requirements)
+        CHECK_FALSE(settings::is_valid_buffer_size(4096));
+        CHECK(settings::find_nearest_buffer_size(4096) == 2048);
+    }
+}
+
+TEST_CASE("Settings | Stage Validation Enforcement", "[settings][validation]") {
+
+    SECTION("staging with valid sample rate succeeds") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "test.json", 1};
+        test_settings.init(logger, config);
+        test_settings.load_or_create();
+
+        for (int rate : {44100, 48000, 88200, 96000, 176400, 192000}) {
+            auto result = test_settings.stage([rate](settings::AppSettings& s) {
+                s.audio.sampling_rate = rate;
+            });
+            REQUIRE(result.ok);
+        }
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("staging with invalid sample rate fails with error message") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "test.json", 1};
+        test_settings.init(logger, config);
+        test_settings.load_or_create();
+
+        auto result = test_settings.stage([](settings::AppSettings& s) {
+            s.audio.sampling_rate = 32000; // Invalid
+        });
+
+        REQUIRE_FALSE(result.ok);
+        CHECK_THAT(result.error, Catch::Matchers::ContainsSubstring("Invalid sample rate"));
+        CHECK_THAT(result.error, Catch::Matchers::ContainsSubstring("32000"));
+        CHECK_THAT(result.error, Catch::Matchers::ContainsSubstring("44100"));
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("staging with valid buffer size succeeds") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "test.json", 1};
+        test_settings.init(logger, config);
+        test_settings.load_or_create();
+
+        for (int size : {32, 64, 128, 256, 512, 1024, 2048}) {
+            auto result = test_settings.stage([size](settings::AppSettings& s) {
+                s.audio.buffer_size = size;
+            });
+            REQUIRE(result.ok);
+        }
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("staging with invalid buffer size fails with error message") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "test.json", 1};
+        test_settings.init(logger, config);
+        test_settings.load_or_create();
+
+        auto result = test_settings.stage([](settings::AppSettings& s) {
+            s.audio.buffer_size = 4096; // Invalid (above max)
+        });
+
+        REQUIRE_FALSE(result.ok);
+        CHECK_THAT(result.error, Catch::Matchers::ContainsSubstring("Invalid buffer size"));
+        CHECK_THAT(result.error, Catch::Matchers::ContainsSubstring("4096"));
+        CHECK_THAT(result.error, Catch::Matchers::ContainsSubstring("2048"));
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("staging with multiple invalid values fails with first error") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "test.json", 1};
+        test_settings.init(logger, config);
+        test_settings.load_or_create();
+
+        auto result = test_settings.stage([](settings::AppSettings& s) {
+            s.audio.sampling_rate = 32000; // Invalid
+            s.audio.buffer_size = 4096;    // Also invalid
+        });
+
+        REQUIRE_FALSE(result.ok);
+        // Should fail on sample rate validation first
+        CHECK_THAT(result.error, Catch::Matchers::ContainsSubstring("sample rate"));
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("staging validation failure does not modify pending") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "test.json", 1};
+        test_settings.init(logger, config);
+        test_settings.load_or_create();
+
+        auto original_rate = test_settings.pending_copy().audio.sampling_rate;
+
+        auto result = test_settings.stage([](settings::AppSettings& s) {
+            s.audio.sampling_rate = 999999; // Invalid
+        });
+
+        REQUIRE_FALSE(result.ok);
+        CHECK(test_settings.pending_copy().audio.sampling_rate == original_rate);
+        CHECK_FALSE(test_settings.has_pending_changes());
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("staging with valid audio settings and invalid other settings succeeds") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "test.json", 1};
+        test_settings.init(logger, config);
+        test_settings.load_or_create();
+
+        // Only audio settings are validated
+        auto result = test_settings.stage([](settings::AppSettings& s) {
+            s.audio.sampling_rate = 96000; // Valid
+            s.audio.num_channels = -1;     // Invalid, but not validated
+        });
+
+        CHECK(result.ok);
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+}
+
+TEST_CASE("Settings | Load Auto-Correction", "[settings][validation]") {
+
+    SECTION("loading file with invalid sample rate auto-corrects to nearest valid") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        // Create file with invalid sample rate
+        const std::string invalid_json = R"({
+            "schema_version": 1,
+            "general": {"log_level": "debug"},
+            "audio": {
+                "sampling_rate": 32000,
+                "buffer_size": 256,
+                "num_channels": 8,
+                "input_device_id": "system_default",
+                "output_device_id": "system_default"
+            },
+            "jack": {
+                "client_name": "aknet",
+                "server_executable_path": "/opt/homebrew/bin/jackd",
+                "auto_manage_server": false
+            }
+        })";
+
+        auto file_path = temp_dir.path() / "invalid.json";
+        std::ofstream out(file_path);
+        out << invalid_json;
+        out.close();
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "invalid.json", 1};
+        test_settings.init(logger, config);
+
+        auto result = test_settings.load_or_create();
+
+        REQUIRE(result.ok);
+        CHECK(test_settings.snapshot()->audio.sampling_rate != 32000);
+        CHECK(settings::is_valid_sample_rate(test_settings.snapshot()->audio.sampling_rate));
+        // 32000 should round to 44100 (nearest)
+        CHECK(test_settings.snapshot()->audio.sampling_rate == 44100);
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("loading file with invalid buffer size auto-corrects to nearest valid") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        // Create file with invalid buffer size
+        const std::string invalid_json = R"({
+            "schema_version": 1,
+            "general": {"log_level": "debug"},
+            "audio": {
+                "sampling_rate": 48000,
+                "buffer_size": 4096,
+                "num_channels": 8,
+                "input_device_id": "system_default",
+                "output_device_id": "system_default"
+            },
+            "jack": {
+                "client_name": "aknet",
+                "server_executable_path": "/opt/homebrew/bin/jackd",
+                "auto_manage_server": false
+            }
+        })";
+
+        auto file_path = temp_dir.path() / "invalid.json";
+        std::ofstream out(file_path);
+        out << invalid_json;
+        out.close();
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "invalid.json", 1};
+        test_settings.init(logger, config);
+
+        auto result = test_settings.load_or_create();
+
+        REQUIRE(result.ok);
+        CHECK(test_settings.snapshot()->audio.buffer_size != 4096);
+        CHECK(settings::is_valid_buffer_size(test_settings.snapshot()->audio.buffer_size));
+        // 4096 should round to 2048 (max)
+        CHECK(test_settings.snapshot()->audio.buffer_size == 2048);
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("loading file with both invalid values auto-corrects both") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        const std::string invalid_json = R"({
+            "schema_version": 1,
+            "general": {"log_level": "debug"},
+            "audio": {
+                "sampling_rate": 22050,
+                "buffer_size": 100,
+                "num_channels": 8,
+                "input_device_id": "system_default",
+                "output_device_id": "system_default"
+            },
+            "jack": {
+                "client_name": "aknet",
+                "server_executable_path": "/opt/homebrew/bin/jackd",
+                "auto_manage_server": false
+            }
+        })";
+
+        auto file_path = temp_dir.path() / "invalid.json";
+        std::ofstream out(file_path);
+        out << invalid_json;
+        out.close();
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "invalid.json", 1};
+        test_settings.init(logger, config);
+
+        auto result = test_settings.load_or_create();
+
+        REQUIRE(result.ok);
+        CHECK(settings::is_valid_sample_rate(test_settings.snapshot()->audio.sampling_rate));
+        CHECK(settings::is_valid_buffer_size(test_settings.snapshot()->audio.buffer_size));
+        CHECK(test_settings.snapshot()->audio.sampling_rate == 44100); // Nearest to 22050
+        CHECK(test_settings.snapshot()->audio.buffer_size == 128);     // Nearest to 100
+
+        test_settings.shutdown();
+        log::shutdown();
+    }
+
+    SECTION("auto-correction saves corrected values back to file") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        const std::string invalid_json = R"({
+            "schema_version": 1,
+            "audio": {"sampling_rate": 50000, "buffer_size": 777}
+        })";
+
+        auto file_path = temp_dir.path() / "invalid.json";
+        std::ofstream out(file_path);
+        out << invalid_json;
+        out.close();
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "invalid.json", 1};
+        test_settings.init(logger, config);
+        test_settings.load_or_create();
+        test_settings.shutdown();
+
+        // Reload from file to verify corrections were saved
+        settings::AppSettings reloaded{};
+        auto read_result = settings::from_json_file(file_path, reloaded);
+        REQUIRE(read_result.ok);
+        CHECK(settings::is_valid_sample_rate(reloaded.audio.sampling_rate));
+        CHECK(settings::is_valid_buffer_size(reloaded.audio.buffer_size));
+
+        log::shutdown();
+    }
+
+    SECTION("loading file with valid values does not trigger auto-correction") {
+        TempDir temp_dir;
+        log::init();
+        auto logger = log::get("test");
+
+        const std::string valid_json = R"({
+            "schema_version": 1,
+            "audio": {"sampling_rate": 96000, "buffer_size": 512}
+        })";
+
+        auto file_path = temp_dir.path() / "valid.json";
+        std::ofstream out(file_path);
+        out << valid_json;
+        out.close();
+
+        settings::Settings test_settings;
+        auto config = settings::SettingsConfig{temp_dir.path(), "valid.json", 1};
+        test_settings.init(logger, config);
+        test_settings.load_or_create();
+
+        auto snapshot = test_settings.snapshot();
+        CHECK(snapshot->audio.sampling_rate == 96000);
+        CHECK(snapshot->audio.buffer_size == 512);
+
+        // Verify no backup file was created (which would indicate a rewrite)
+        auto bak_path = file_path.string() + ".bak";
+        CHECK_FALSE(fs::exists(bak_path));
+
+        test_settings.shutdown();
+
         log::shutdown();
     }
 }

@@ -1,3 +1,10 @@
+// Valid audio configuration values
+export const VALID_SAMPLE_RATES = [
+  44100, 48000, 88200, 96000, 176400, 192000,
+] as const;
+
+export const VALID_BUFFER_SIZES = [32, 64, 128, 256, 512, 1024, 2048] as const;
+
 export interface General {
   log_level: string;
   test_restart_impact: number;

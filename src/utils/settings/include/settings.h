@@ -170,6 +170,64 @@ namespace aknet::settings {
     };
 
     // =========================================================================
+    // Audio Settings Validation
+    // =========================================================================
+
+    /**
+     * Valid sample rate values in Hz.
+     *
+     * Only these standard audio sample rates are supported by the application.
+     */
+    inline constexpr std::array<int, 6> VALID_SAMPLE_RATES = {44100, 48000, 88200, 96000, 176400, 192000};
+
+    /**
+     * Valid buffer size values in samples.
+     *
+     * Buffer sizes must be powers of 2 between 32 and 2048.
+     */
+    inline constexpr std::array<int, 7> VALID_BUFFER_SIZES = {32, 64, 128, 256, 512, 1024, 2048};
+
+    /**
+     * Check if a sample rate is valid.
+     *
+     * @param rate Sample rate in Hz to validate.
+     *
+     * @return True if the sample rate is in the list of valid values.
+     */
+    bool is_valid_sample_rate(int rate);
+
+    /**
+     * Check if a buffer size is valid.
+     *
+     * @param size Buffer size in samples to validate.
+     *
+     * @return True if the buffer size is in the list of valid values.
+     */
+    bool is_valid_buffer_size(int size);
+
+    /**
+     * Find the nearest valid sample rate to a given value.
+     *
+     * Used for auto-correcting invalid values when loading settings.
+     *
+     * @param rate The sample rate to find the nearest valid value for.
+     *
+     * @return The nearest valid sample rate.
+     */
+    int find_nearest_sample_rate(int rate);
+
+    /**
+     * Find the nearest valid buffer size to a given value.
+     *
+     * Used for auto-correcting invalid values when loading settings.
+     *
+     * @param size The buffer size to find the nearest valid value for.
+     *
+     * @return The nearest valid buffer size.
+     */
+    int find_nearest_buffer_size(int size);
+
+    // =========================================================================
     // JSON Helper Functions
     // =========================================================================
 
