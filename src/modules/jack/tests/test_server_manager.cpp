@@ -2,7 +2,7 @@
 // Created by Nicolas Désilles on 25/01/2026.
 //
 
-#include "test_fixtures.h"
+#include "helpers/test_fixtures.h"
 
 using namespace aknet;
 using namespace aknet::test;
@@ -99,7 +99,11 @@ TEST_CASE("Jack | ServerManager - Starting server when not running", "[jack][ser
         jack::JackServerManager manager(f.logger, f.client_api, f.process_runner);
 
         f.client_api->set_probe_result({0, 0, false});  // Server not running
+        f.client_api->set_probe_result_after_ready({48000, 512, true});  // Server ready after spawn
         f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
 
         jack::ServerConfig config{
             .executable_path = "/opt/homebrew/bin/jackd",
@@ -222,18 +226,22 @@ TEST_CASE("Jack | ServerManager - Restarting owned server", "[jack][server_manag
 
         // Start server initially with one config
         f.client_api->set_probe_result({0, 0, false});
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
         f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
 
         jack::ServerConfig config1{"/opt/homebrew/bin/jackd", 48000, 256};
         auto result1 = manager.ensure_server(config1);
         REQUIRE(result1.ok);
         REQUIRE(manager.owns_server());
 
-        // Now simulate server running with our old settings
-        f.client_api->set_probe_result({48000, 256, true});
+        // Now simulate server running with our old settings (already set by mark_server_ready)
 
-        // Try to ensure server with new settings
+        // Try to ensure server with new settings - update the ready state for restart
         jack::ServerConfig config2{"/opt/homebrew/bin/jackd", 96000, 512};
+        f.client_api->set_probe_result_after_ready({96000, 512, true});
         f.process_runner->set_spawn_result(true, 5678);
 
         auto result2 = manager.ensure_server(config2);
@@ -264,7 +272,11 @@ TEST_CASE("Jack | ServerManager - Stopping server", "[jack][server_manager]") {
 
         // Start a server
         f.client_api->set_probe_result({0, 0, false});
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
         f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
 
         jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
         manager.ensure_server(config);
@@ -300,7 +312,11 @@ TEST_CASE("Jack | ServerManager - Stopping server", "[jack][server_manager]") {
             jack::JackServerManager manager(f.logger, f.client_api, f.process_runner);
 
             f.client_api->set_probe_result({0, 0, false});
+            f.client_api->set_probe_result_after_ready({48000, 256, true});
             f.process_runner->set_spawn_result(true, 1234);
+            f.process_runner->set_on_spawn_callback([&]() {
+                f.client_api->mark_server_ready();
+            });
 
             jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
             manager.ensure_server(config);
@@ -331,7 +347,11 @@ TEST_CASE("Jack | ServerManager - Ownership tracking", "[jack][server_manager]")
         jack::JackServerManager manager(f.logger, f.client_api, f.process_runner);
 
         f.client_api->set_probe_result({0, 0, false});
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
         f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
 
         jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
         manager.ensure_server(config);
@@ -356,7 +376,11 @@ TEST_CASE("Jack | ServerManager - Ownership tracking", "[jack][server_manager]")
         jack::JackServerManager manager(f.logger, f.client_api, f.process_runner);
 
         f.client_api->set_probe_result({0, 0, false});
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
         f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
 
         jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
         manager.ensure_server(config);
@@ -376,15 +400,18 @@ TEST_CASE("Jack | ServerManager - Multiple ensure_server calls", "[jack][server_
         jack::JackServerManager manager(f.logger, f.client_api, f.process_runner);
 
         f.client_api->set_probe_result({0, 0, false});
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
         f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
 
         jack::ServerConfig config{"/opt/homebrew/bin/jackd", 48000, 256};
 
         auto result1 = manager.ensure_server(config);
         CHECK(result1.ok);
 
-        // Simulate server now running with our settings
-        f.client_api->set_probe_result({48000, 256, true});
+        // Server is now running with our settings (set by mark_server_ready)
 
         auto result2 = manager.ensure_server(config);
         CHECK(result2.ok);
@@ -399,13 +426,18 @@ TEST_CASE("Jack | ServerManager - Multiple ensure_server calls", "[jack][server_
 
         // Start with first config
         f.client_api->set_probe_result({0, 0, false});
+        f.client_api->set_probe_result_after_ready({48000, 256, true});
         f.process_runner->set_spawn_result(true, 1234);
+        f.process_runner->set_on_spawn_callback([&]() {
+            f.client_api->mark_server_ready();
+        });
 
         jack::ServerConfig config1{"/opt/homebrew/bin/jackd", 48000, 256};
         manager.ensure_server(config1);
 
-        // Now server is running with first config
-        f.client_api->set_probe_result({48000, 256, true});
+        // Now server is running with first config (set by mark_server_ready)
+        // Update ready state for restart
+        f.client_api->set_probe_result_after_ready({96000, 512, true});
         f.process_runner->set_spawn_result(true, 5678);
 
         // Try different config

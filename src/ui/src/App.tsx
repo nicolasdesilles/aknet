@@ -1,20 +1,19 @@
-import { exposed } from "@saucer-dev/types";
-
-import { Button } from "@/components/ui/button";
-
 import { StartupStatus } from "@/components/StartupStatus";
-import { SettingsPanel } from "@/components/SettingsPanel";
-
-function handleClick() {
-  exposed<void, [void]>("log_test_msg")();
-}
+import { SettingsDialog } from "@/components/SettingsDialog";
+import { useStartupEvents } from "@/hooks/useStartupEvents";
+import { AppState } from "@/types/startup";
 
 function App() {
+  const { appState } = useStartupEvents();
+  const isStartupRunning = appState === AppState.Booting;
+
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
-      <SettingsPanel />
+    <div className="flex min-h-svh flex-col items-center justify-center gap-6 p-4">
+      <div className="flex items-center gap-4">
+        <h1 className="text-2xl font-bold">aknet</h1>
+        <SettingsDialog disabled={isStartupRunning} />
+      </div>
       <StartupStatus />
-      <Button onClick={handleClick}>Test Log Message</Button>
     </div>
   );
 }

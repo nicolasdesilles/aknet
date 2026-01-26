@@ -5,6 +5,8 @@
 #include "jack_server_manager.h"
 #include <stdexcept>
 #include <sstream>
+#include <thread>
+#include <chrono>
 
 namespace aknet::jack {
 
@@ -36,6 +38,27 @@ ServerInfo JackServerManager::probe_server() {
     return client_api_->probe_server();
 }
 
+Result JackServerManager::wait_for_server_ready() {
+    constexpr int max_wait_ms = 5000;
+    constexpr int poll_interval_ms = 100;
+    int waited_ms = 0;
+
+    logger_->info("Waiting for JACK server to be ready...");
+
+    while (waited_ms < max_wait_ms) {
+        auto probe = probe_server();
+        if (probe.is_running) {
+            logger_->info("JACK server ready after {}ms", waited_ms);
+            return {true, ""};
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
+        waited_ms += poll_interval_ms;
+    }
+
+    return {false, "JACK server failed to become ready within " + std::to_string(max_wait_ms) + "ms timeout"};
+}
+
 Result JackServerManager::ensure_server(const ServerConfig& config, bool force_restart) {
     // Probe current server state
     auto info = probe_server();
@@ -63,6 +86,14 @@ Result JackServerManager::ensure_server(const ServerConfig& config, bool force_r
 
         owned_server_pid_ = pid;
         logger_->info("Started JACK server with PID {}", pid);
+
+        // Wait for server to be ready to accept connections
+        auto wait_result = wait_for_server_ready();
+        if (!wait_result.ok) {
+            logger_->error("JACK server started but not responding: {}", wait_result.error);
+            return wait_result;
+        }
+
         return {true, ""};
     }
 
@@ -87,9 +118,6 @@ Result JackServerManager::ensure_server(const ServerConfig& config, bool force_r
             return stop_result;
         }
 
-        // Note: In production, might need to wait/poll for server to fully stop
-        // For tests with mocks, this is immediate
-
         // Spawn with new config
         std::vector<std::string> args = {
             "-R",
@@ -108,6 +136,14 @@ Result JackServerManager::ensure_server(const ServerConfig& config, bool force_r
 
         owned_server_pid_ = pid;
         logger_->info("Restarted JACK server with PID {}", pid);
+
+        // Wait for server to be ready to accept connections
+        auto wait_result = wait_for_server_ready();
+        if (!wait_result.ok) {
+            logger_->error("JACK server restarted but not responding: {}", wait_result.error);
+            return wait_result;
+        }
+
         return {true, ""};
     }
 

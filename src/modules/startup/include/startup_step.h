@@ -20,6 +20,10 @@ namespace aknet::settings {
     class Settings;
 }
 
+namespace aknet::jack {
+    class JackModule;
+}
+
 namespace aknet::startup {
 
     /**
@@ -100,6 +104,11 @@ namespace aknet::startup {
              * Settings access (read-only during step execution).
              */
             settings::Settings* settings{nullptr};
+
+            /**
+             * Jack Module access
+             */
+            std::shared_ptr<jack::JackModule> jack_module;
 
             /**
              * Check if abort has been requested.

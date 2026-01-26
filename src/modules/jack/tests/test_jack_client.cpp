@@ -2,8 +2,9 @@
 // Created by Nicolas Désilles on 25/01/2026.
 //
 
-#include "test_fixtures.h"
 #include <jack_client.h>
+
+#include "helpers/test_fixtures.h"
 
 using namespace aknet;
 using namespace aknet::test;

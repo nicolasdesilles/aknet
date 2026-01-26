@@ -158,6 +158,11 @@ namespace aknet::startup::manager {
         return engine_->can_retry();
     }
 
+    void StartupManager::set_jack_module(std::shared_ptr<jack::JackModule> jack_module) {
+        std::lock_guard lock(mutex_);
+        engine_->set_jack_module(std::move(jack_module));
+    }
+
     // Worker thread
 
     void StartupManager::worker_thread_fn() {

@@ -27,6 +27,10 @@ namespace aknet::settings {
     class Settings;
 }
 
+namespace aknet::jack {
+    class JackModule;
+}
+
 namespace aknet::startup {
 
     /**
@@ -203,6 +207,13 @@ namespace aknet::startup {
          * @return True if last run failed with can_retry=true and not currently running.
          */
         bool can_retry() const;
+
+        /**
+        * Set the JackModule for steps to use.
+        *
+        * @param jack_module Shared pointer to JackModule.
+        */
+        void set_jack_module(std::shared_ptr<jack::JackModule> jack_module);
 
         // -- Event System --
 

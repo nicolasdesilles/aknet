@@ -2,8 +2,8 @@
 // Created by Nicolas Désilles on 25/01/2026.
 //
 
-#ifndef AKNET_JACK_H
-#define AKNET_JACK_H
+#ifndef AKNET_JACK_CLIENT_H
+#define AKNET_JACK_CLIENT_H
 
 #pragma once
 
@@ -214,4 +214,4 @@ namespace aknet::jack {
 
 } // namespace aknet::jack
 
-#endif //AKNET_JACK_H
+#endif //AKNET_JACK_CLIENT_H

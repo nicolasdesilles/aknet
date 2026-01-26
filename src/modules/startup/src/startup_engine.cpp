@@ -281,6 +281,10 @@ namespace aknet::startup::engine {
         return progress_.state == AppState::Off && progress_.can_retry;
     }
 
+    void StartupEngine::set_jack_module(std::shared_ptr<jack::JackModule> jack_module) {
+        jack_module_ = std::move(jack_module);
+    }
+
     // Rebuild progress snapshot
 
     void StartupEngine::rebuild_progress_snapshot(AppState state) {
@@ -326,6 +330,7 @@ namespace aknet::startup::engine {
         ctx.deadline = deadline;
         ctx.logger = logger_;
         ctx.settings = settings_.get();
+        ctx.jack_module = jack_module_;
 
         logger_->info("Running step {}...", steps_[index]->config().id);
 

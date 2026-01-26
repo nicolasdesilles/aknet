@@ -63,6 +63,7 @@ embedded
 src/ui/node_modules/
 src/ui/dist/
 src/ui/.vite/
+src/ui/.cursor/
 src/ui/.cache/
 src/ui/coverage/
 src/ui/.env

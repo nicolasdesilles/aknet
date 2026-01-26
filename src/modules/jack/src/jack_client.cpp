@@ -36,18 +36,14 @@ namespace aknet::jack {
             return {false, "Client name cannot be empty"};
         }
 
-        logger_->info("Opening JACK client: {}", client_name);
-
         auto result = client_api_->open_client(client_name);
 
         if (!result.ok) {
-            logger_->error("Failed to open JACK client: {}", result.error);
             return result;
         }
 
         state_ = ClientState::Open;
         client_name_ = client_name;
-        logger_->info("JACK client opened successfully");
 
         return result;
     }
@@ -68,20 +64,14 @@ namespace aknet::jack {
             return {false, "Invalid port count"};
         }
 
-        logger_->info("Registering {} input ports", count);
-
         auto result = client_api_->register_input_ports(count);
 
         if (!result.ok) {
-            logger_->error("Failed to register input ports: {}", result.error);
             return result;
         }
 
         input_port_count_ = count;
-
         input_ports_ = client_api_->get_input_ports();
-
-        logger_->info("Registered {} input ports", count);
 
         return result;
     }
@@ -97,17 +87,13 @@ namespace aknet::jack {
             return {false, "Client already active"};
         }
 
-        logger_->info("Activating JACK client");
-
         auto result = client_api_->activate();
 
         if (!result.ok) {
-            logger_->error("Failed to activate JACK client: {}", result.error);
             return result;
         }
 
         state_ = ClientState::Active;
-        logger_->info("JACK client activated");
 
         return result;
     }
@@ -118,12 +104,9 @@ namespace aknet::jack {
             return {true, ""};
         }
 
-        logger_->info("Closing JACK client");
-
         auto result = client_api_->close_client();
 
         if (!result.ok) {
-            logger_->error("Failed to close JACK client: {}", result.error);
             return result;
         }
 
@@ -132,7 +115,6 @@ namespace aknet::jack {
         input_port_count_ = 0;
         input_ports_.clear();
         audio_processor_.reset();
-        logger_->info("JACK client closed");
 
         return result;
     }

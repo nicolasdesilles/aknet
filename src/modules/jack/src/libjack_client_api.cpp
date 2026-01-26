@@ -25,8 +25,6 @@ namespace aknet::jack {
     }
 
     ServerInfo LibJackClientAPI::probe_server() {
-        logger_->debug("Probing JACK server");
-
         // Open a temporary client to query server
         // JackNoStartServer: Don't auto-start server if not running
         jack_status_t status;
@@ -37,7 +35,8 @@ namespace aknet::jack {
         );
 
         if (!temp_client) {
-            logger_->warn("JACK server not running (status: {})", jack_status_to_string(status));
+            // Debug level since this is expected during polling/startup
+            logger_->debug("JACK server not reachable (status: {})", jack_status_to_string(status));
             return {0, 0, false};
         }
 

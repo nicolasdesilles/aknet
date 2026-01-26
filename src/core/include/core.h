@@ -18,6 +18,7 @@
 #include <logger.h>
 #include <settings.h>
 #include <startup_manager.h>
+#include <jack_module.h>
 
 // Saucer webview
 #include <saucer/smartview.hpp>
@@ -337,10 +338,39 @@ namespace aknet {
          */
         bool has_pending_settings_changes();
 
+
+        /**
+         * Retrieves the current audio levels.
+         *
+         * @return A list of audio levels, where each value corresponds to the respective channel's level.
+         *
+         * @see jack::JackAudioProcessor
+         */
+        std::vector<float> get_audio_levels();
+
+        /**
+         * Retrieves the peak levels of the given audio signal.
+         *
+         * @return A list of peak levels, where each value corresponds to the highest amplitude detected in a channel.
+         *
+         * @see jack::JackAudioProcessor
+         */
+        std::vector<float> get_peak_levels();
+
+        /**
+         * Reset the peak level values.
+         */
+        void reset_peak_levels();
+
     private:
         std::shared_ptr<log::Logger> logger_;
 
         void log_aknet_start_message();
+
+        /**
+         * Create StepContext for startup steps.
+         */
+        startup::StepContext create_step_context();
 
         // Settings system
         settings::Settings settings_;
@@ -348,6 +378,7 @@ namespace aknet {
         // Owned modules
         std::unique_ptr<startup::StartupManager> startup_manager_;
         std::unique_ptr<bridge::EventBridge> bridge_;
+        std::shared_ptr<jack::JackModule> jack_module_;
     };
 
 } // namespace aknet

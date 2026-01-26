@@ -122,6 +122,16 @@ namespace aknet::jack {
         */
         std::optional<int> owned_server_pid_;
 
+        /**
+         * Wait for the JACK server to be ready to accept connections.
+         *
+         * Polls the server with a timeout. Used after spawning jackd
+         * since the server takes time to initialize before accepting clients.
+         *
+         * @return Result indicating success or timeout error.
+         */
+        Result wait_for_server_ready();
+
     };
 
 }

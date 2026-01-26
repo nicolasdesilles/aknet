@@ -22,7 +22,6 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { call } from "@saucer-dev/types";
-import { useState } from "react";
 
 function getAppStateLabel(state: AppState): string {
   switch (state) {
@@ -40,7 +39,7 @@ function getAppStateLabel(state: AppState): string {
 }
 
 function getAppStateBadgeVariant(
-  state: AppState,
+  state: AppState
 ): "default" | "secondary" | "destructive" | "outline" {
   switch (state) {
     case AppState.Off:
@@ -97,15 +96,8 @@ function getStepStatusLabel(status: StepStatus): string {
   }
 }
 
-const TEST_MODES = [
-  { value: 0, label: "Normal", description: "All steps succeed" },
-  { value: 1, label: "With Failure", description: "One step fails" },
-  { value: 2, label: "With Timeout", description: "One step times out" },
-] as const;
-
 export function StartupStatus() {
   const { progress, appState, isComplete, error } = useStartupEvents();
-  const [testMode, setTestMode] = useState(0);
 
   const progressPercent = progress
     ? ((progress.current_step_index + 1) / Math.max(progress.steps.length, 1)) *
@@ -122,11 +114,6 @@ export function StartupStatus() {
 
   const handleRetry = async () => {
     await call<boolean>("retry_startup", []);
-  };
-
-  const handleTestModeChange = async (mode: number) => {
-    setTestMode(mode);
-    await call<void>("set_test_mode", [mode]);
   };
 
   const isRunning = appState === AppState.Booting;
@@ -154,26 +141,6 @@ export function StartupStatus() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Test mode selector - only show when not running */}
-        {canStart && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Test Mode</label>
-            <div className="flex gap-1">
-              {TEST_MODES.map((mode) => (
-                <Button
-                  key={mode.value}
-                  variant={testMode === mode.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => handleTestModeChange(mode.value)}
-                  title={mode.description}
-                >
-                  {mode.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Control buttons */}
         <div className="flex gap-2">
           {canStart && (
@@ -242,18 +209,6 @@ export function StartupStatus() {
             <p className="text-sm text-destructive">{error}</p>
           </div>
         )}
-
-        {/* Debug info */}
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer">Debug Info</summary>
-          <pre className="mt-2 p-2 bg-muted rounded overflow-auto max-h-40">
-            {JSON.stringify(
-              { appState, testMode, progress, isComplete, error },
-              null,
-              2,
-            )}
-          </pre>
-        </details>
       </CardContent>
     </Card>
   );

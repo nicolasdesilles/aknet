@@ -69,14 +69,22 @@ namespace aknet {
             [](settings::Settings*){} // no-op deleter
         );
 
+        // Initialize JACK module
+        jack_module_ = std::make_shared<jack::JackModule>(logger_);
+        logger_->info("JACK module created");
+
+
+        // Initialize StartupManager
         startup_manager_ = std::make_unique<startup::StartupManager>(
             startup_logger,
             settings_ptr
         );
 
-        // Register fake startup steps for testing
+        // Pass jack_module to startup manager
+        startup_manager_->set_jack_module(jack_module_);
+
+        // Register startup steps
         startup_manager_->set_steps(startup::create_default_steps());
-        logger_->info("Registered {} startup steps", 6);
 
         logger_->info("Initializing Core: Done.");
     }
@@ -101,6 +109,14 @@ namespace aknet {
 
         // Shutdown logging infrastructure last
         log::shutdown();
+    }
+
+    startup::StepContext core::create_step_context() {
+        startup::StepContext ctx;
+        ctx.logger = logger_;
+        ctx.settings = &settings_;
+        ctx.jack_module = jack_module_;
+        return ctx;
     }
 
     void core::test_function() {
@@ -156,30 +172,9 @@ namespace aknet {
     }
 
     void core::set_test_mode(int mode) {
-        using namespace startup;
-        
-        std::vector<std::unique_ptr<IStartupStep>> steps;
-        
-        switch (mode) {
-            case 1:  // With failure
-                steps.push_back(std::make_unique<CheckJackInstallationStep>());
-                steps.push_back(std::make_unique<DiscoverNMOSRegistryStep>());
-                steps.push_back(std::make_unique<FailingStep>());
-                steps.push_back(std::make_unique<LoadAudioDevicesStep>());
-                break;
-            case 2:  // With timeout
-                steps.push_back(std::make_unique<CheckJackInstallationStep>());
-                steps.push_back(std::make_unique<SlowStep>());
-                steps.push_back(std::make_unique<LoadAudioDevicesStep>());
-                break;
-            default:  // Normal
-                steps = create_default_steps();
-                break;
-        }
-        
+        logger_->warn("Test mode {} requested - fake steps removed, using production steps", mode);
         startup_manager_->clear_steps();
-        startup_manager_->set_steps(std::move(steps));
-        logger_->info("Set test mode: {}", mode);
+        startup_manager_->set_steps(startup::create_default_steps());
     }
 
     std::string core::get_settings_json() {

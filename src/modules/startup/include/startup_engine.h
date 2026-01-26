@@ -22,6 +22,10 @@ namespace aknet::settings {
     class Settings;
 }
 
+namespace aknet::jack {
+    class JackModule;
+}
+
 namespace aknet::startup {
 
     /**
@@ -29,8 +33,8 @@ namespace aknet::startup {
      */
     namespace engine {
 
-        /**
-         * Synchronous startup sequence execution engine.
+    /**
+     * Synchronous startup sequence execution engine.
      *
      * Executes registered steps in order, manages timeouts and abort handling, and tracks progress.
      * Designed to be used by StartupManager, not directly by application code.
@@ -237,6 +241,13 @@ namespace aknet::startup {
          */
         bool can_retry() const;
 
+        /**
+        * Set the JackModule for steps to use.
+        *
+        * @param jack_module Shared pointer to JackModule.
+        */
+        void set_jack_module(std::shared_ptr<jack::JackModule> jack_module);
+
     private:
         /**
          * Rebuild progress snapshot from current steps.
@@ -264,6 +275,11 @@ namespace aknet::startup {
          * Settings access for steps.
          */
         std::shared_ptr<settings::Settings> settings_;
+
+        /**
+         * Jack Module access for steps.
+         */
+        std::shared_ptr<jack::JackModule> jack_module_;
 
         /**
          * Clock for timeout checking.

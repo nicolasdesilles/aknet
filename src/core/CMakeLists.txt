@@ -28,6 +28,7 @@ target_link_libraries(aknet_core PUBLIC
         aknet_settings
         aknet_startup
         aknet_bridge
+        aknet_jack
         saucer::saucer
 )
 

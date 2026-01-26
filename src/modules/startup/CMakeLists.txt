@@ -36,6 +36,7 @@ target_compile_features(aknet_startup PRIVATE cxx_std_23)
 target_link_libraries(aknet_startup PUBLIC
         aknet_logger
         aknet_settings
+        aknet_jack
         nlohmann_json::nlohmann_json
         cr::ereignis
         saucer::fill  )
