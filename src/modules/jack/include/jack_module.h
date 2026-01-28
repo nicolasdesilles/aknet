@@ -16,6 +16,7 @@
 #include <logger.h>
 #include <settings.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace aknet::jack {
@@ -169,6 +170,21 @@ namespace aknet::jack {
          * @return Current state (Uninitialized, Initialized, or Active).
          */
         JackModuleState get_state() const;
+
+        /**
+         * Check if the JACK client is active.
+         *
+         * @return True if client is active.
+         */
+        bool is_client_active() const;
+
+        /**
+         * Get the current number of input ports registered on the client.
+         *
+         * @return Number of input ports, or 0 if not available.
+         */
+        int get_client_input_port_count() const;
+
 
     private:
         std::shared_ptr<log::Logger> logger_;

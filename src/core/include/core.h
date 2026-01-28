@@ -11,8 +11,11 @@
 
 #pragma once
 
-#include <memory>
+#include <atomic>
 #include <filesystem>
+#include <memory>
+#include <string>
+#include <thread>
 
 // aknet utils and modules
 #include <logger.h>
@@ -361,6 +364,15 @@ namespace aknet {
          */
         std::string get_default_audio_device_json();
 
+        /**
+         * Get application status snapshot as JSON string.
+         *
+         * Includes app state, JACK server/client status, and audio settings.
+         *
+         * @return JSON string of StatusSnapshot.
+         */
+        std::string get_status_snapshot_json();
+
 
         /**
          * Retrieves the current audio levels.
@@ -389,6 +401,8 @@ namespace aknet {
         std::shared_ptr<log::Logger> logger_;
 
         void log_aknet_start_message();
+        void start_status_tick();
+        void stop_status_tick();
 
         /**
          * Create StepContext for startup steps.
@@ -402,6 +416,10 @@ namespace aknet {
         std::unique_ptr<startup::StartupManager> startup_manager_;
         std::unique_ptr<bridge::EventBridge> bridge_;
         std::shared_ptr<jack::JackModule> jack_module_;
+
+        // Status tick loop
+        std::atomic<bool> status_tick_stop_{false};
+        std::thread status_tick_thread_;
     };
 
 } // namespace aknet

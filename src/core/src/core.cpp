@@ -8,6 +8,10 @@
 #include <jack.h>
 #include <saucer/smartview.hpp>
 #include <steps_definition.h>
+#include <optional>
+#include <chrono>
+#include <thread>
+#include <jack/jack.h>
 
 
 
@@ -106,6 +110,8 @@ namespace aknet {
     core::~core() {
         logger_->info("Core shutting down...");
 
+        stop_status_tick();
+
         // Destroy modules
         if (bridge_) {
             bridge_->disconnect();
@@ -136,6 +142,76 @@ namespace aknet {
         logger_->info("Core test function called");
     }
 
+    void core::start_status_tick() {
+        if (status_tick_thread_.joinable()) {
+            return;
+        }
+
+        status_tick_stop_.store(false, std::memory_order_release);
+
+        status_tick_thread_ = std::thread([this]() {
+            jack_client_t* cpu_client = nullptr;
+
+            auto close_cpu_client = [&]() {
+                if (cpu_client) {
+                    jack_client_close(cpu_client);
+                    cpu_client = nullptr;
+                }
+            };
+
+            while (!status_tick_stop_.load(std::memory_order_acquire)) {
+                const bool is_active = startup_manager_ &&
+                    startup_manager_->get_state() == startup::AppState::Active;
+
+                if (!is_active) {
+                    close_cpu_client();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    continue;
+                }
+
+                std::optional<double> cpu_load;
+
+                if (!cpu_client) {
+                    jack_status_t status;
+                    cpu_client = jack_client_open(
+                        "aknet_status_probe",
+                        JackNoStartServer,
+                        &status
+                    );
+                }
+
+                if (cpu_client) {
+                    cpu_load = jack_cpu_load(cpu_client);
+                } else {
+                    cpu_load.reset();
+                }
+
+                if (bridge_) {
+                    try {
+                        auto snapshot_str = get_status_snapshot_json();
+                        nlohmann::json payload = nlohmann::json::parse(snapshot_str);
+                        payload["jackRuntime"]["cpuLoad"] =
+                            cpu_load.has_value() ? nlohmann::json(*cpu_load) : nlohmann::json(nullptr);
+                        bridge_->dispatch_event("status:tick", payload);
+                    } catch (const std::exception& e) {
+                        logger_->warn("Failed to dispatch status tick: {}", e.what());
+                    }
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            }
+
+            close_cpu_client();
+        });
+    }
+
+    void core::stop_status_tick() {
+        status_tick_stop_.store(true, std::memory_order_release);
+        if (status_tick_thread_.joinable()) {
+            status_tick_thread_.join();
+        }
+    }
+
     template<typename WebviewT>
     void core::init_bridge(WebviewT* webview) {
         if (bridge_) {
@@ -152,6 +228,8 @@ namespace aknet {
         );
 
         bridge_->connect_startup_events(manager_ptr);
+
+        start_status_tick();
 
         logger_->info("Bridge initialized and connected to startup events");
     }
@@ -330,6 +408,60 @@ namespace aknet {
             };
             return error.dump();
         }
+    }
+
+    std::string core::get_status_snapshot_json() {
+        auto snapshot = settings_.snapshot();
+
+        auto app_state = startup_manager_ ? startup_manager_->get_state() : startup::AppState::Off;
+        std::string app_status;
+        switch (app_state) {
+            case startup::AppState::Off:
+                app_status = "off";
+                break;
+            case startup::AppState::Booting:
+                app_status = "booting";
+                break;
+            case startup::AppState::Active:
+                app_status = "active";
+                break;
+            case startup::AppState::ShuttingDown:
+                app_status = "shutting_down";
+                break;
+            default:
+                app_status = "error";
+                break;
+        }
+
+        bool server_running = false;
+
+        try {
+            auto client_api = jack::create_libjack_client_api(logger_);
+            auto server_info = client_api->probe_server();
+            server_running = server_info.is_running;
+        } catch (const std::exception& e) {
+            logger_->warn("Failed to probe JACK server: {}", e.what());
+        }
+
+        bool client_connected = false;
+        int channel_count = snapshot->audio.num_channels;
+        if (jack_module_) {
+            client_connected = jack_module_->is_client_active();
+            int port_count = jack_module_->get_client_input_port_count();
+            if (port_count > 0) {
+                channel_count = port_count;
+            }
+        }
+
+        nlohmann::json response = {
+            {"app", {{"status", app_status}}},
+            {"jackServer", {{"running", server_running}}},
+            {"jackClient", {{"connected", client_connected}, {"channels", channel_count}}},
+            {"audio", {{"sampleRate", snapshot->audio.sampling_rate}, {"bufferSize", snapshot->audio.buffer_size}}},
+            {"jackRuntime", {{"cpuLoad", nullptr}}}
+        };
+
+        return response.dump();
     }
 
     void core::log_aknet_start_message() {

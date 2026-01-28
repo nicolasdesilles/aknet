@@ -16,6 +16,7 @@
 #include <type_traits>
 
 #include <saucer/webview.hpp>
+#include <nlohmann/json.hpp>
 
 namespace aknet::log {
     class Logger;
@@ -187,6 +188,14 @@ namespace aknet::bridge {
          * ```
          */
         void connect_startup_events(std::shared_ptr<startup::StartupManager> manager);
+
+        /**
+         * Dispatch a custom event to the webview.
+         *
+         * @param event_name Name of the JS CustomEvent to dispatch.
+         * @param detail JSON payload to send in event detail.
+         */
+        void dispatch_event(const std::string& event_name, const nlohmann::json& detail);
 
         /**
          * Disconnect from all connected event sources.

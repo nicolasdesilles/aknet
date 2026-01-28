@@ -21,6 +21,10 @@ export function useStartupEvents() {
 
     const handleStateChanged = (e: CustomEvent<StateChangedEvent>) => {
       setAppState(e.detail.new_state);
+      if (e.detail.new_state === AppState.Booting) {
+        setIsComplete(false);
+        setError(null);
+      }
     };
 
     const handleCompleted = (e: CustomEvent<SequenceCompletedEvent>) => {
@@ -36,30 +40,30 @@ export function useStartupEvents() {
 
     window.addEventListener(
       "startup:progress",
-      handleProgress as EventListener
+      handleProgress as EventListener,
     );
     window.addEventListener(
       "startup:state",
-      handleStateChanged as EventListener
+      handleStateChanged as EventListener,
     );
     window.addEventListener(
       "startup:completed",
-      handleCompleted as EventListener
+      handleCompleted as EventListener,
     );
     window.addEventListener("startup:error", handleError as EventListener);
 
     return () => {
       window.removeEventListener(
         "startup:progress",
-        handleProgress as EventListener
+        handleProgress as EventListener,
       );
       window.removeEventListener(
         "startup:state",
-        handleStateChanged as EventListener
+        handleStateChanged as EventListener,
       );
       window.removeEventListener(
         "startup:completed",
-        handleCompleted as EventListener
+        handleCompleted as EventListener,
       );
       window.removeEventListener("startup:error", handleError as EventListener);
     };

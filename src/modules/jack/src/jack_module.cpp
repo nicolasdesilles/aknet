@@ -224,6 +224,15 @@ namespace aknet::jack {
         return state_;
     }
 
+    bool JackModule::is_client_active() const {
+        return client_ ? client_->is_active() : false;
+    }
+
+    int JackModule::get_client_input_port_count() const {
+        return client_ ? client_->get_input_port_count() : 0;
+    }
+
+
     Result JackModule::validate_and_fallback_devices(
         settings::AppSettings& settings,
         bool fallback_to_default)

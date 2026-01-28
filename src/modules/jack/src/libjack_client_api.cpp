@@ -46,9 +46,6 @@ namespace aknet::jack {
         info.buffer_size = static_cast<int>(jack_get_buffer_size(temp_client));
         info.is_running = true;
 
-        logger_->info("JACK server detected: {}Hz, {} samples",
-                      info.sample_rate, info.buffer_size);
-
         // Close temporary client
         jack_client_close(temp_client);
 

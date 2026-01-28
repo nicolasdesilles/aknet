@@ -3,6 +3,14 @@ cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
 # Create the project
 project(aknet LANGUAGES CXX VERSION 0.1.0)
 
+# --------------------------------------------------------------------------------------------------------
+# Build Options
+# --------------------------------------------------------------------------------------------------------
+
+# When ON: embed `src/ui/dist` into the executable (production packaging).
+# When OFF: do NOT scan/embed UI at configure time; the app can load a dev server URL at runtime.
+option(AKNET_EMBED_UI "Embed UI into executable via saucer" ON)
+
 # For reference in C++ code via template header file in core lib
 set (PROJECT_VERSION ${CMAKE_PROJECT_VERSION})
 set (PROJECT_NAME ${CMAKE_PROJECT_NAME})
@@ -127,7 +135,15 @@ if(APPLE)
             aknet_logger
             aknet_settings
             saucer::saucer
-            saucer::embedded
+    )
+
+    if(AKNET_EMBED_UI)
+        target_link_libraries(aknet PRIVATE saucer::embedded)
+    endif()
+
+    # Expose embed flag to C++ (0/1) for conditional compilation.
+    target_compile_definitions(${PROJECT_NAME} PRIVATE
+            AKNET_EMBED_UI=$<IF:$<BOOL:${AKNET_EMBED_UI}>,1,0>
     )
 
     target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
@@ -140,7 +156,9 @@ endif()
 # Saucer Embed
 # --------------------------------------------------------------------------------------------------------
 
-saucer_embed("src/ui/dist")
+if(AKNET_EMBED_UI)
+    saucer_embed("src/ui/dist")
+endif()
 
 # --------------------------------------------------------------------------------------------------------
 # Code Coverage (only for aknet_all_tests)

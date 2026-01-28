@@ -117,6 +117,7 @@ namespace aknet::jack {
          */
         bool owns_server() const;
 
+
         /**
          * Validate that the configured devices exist and are usable.
          *

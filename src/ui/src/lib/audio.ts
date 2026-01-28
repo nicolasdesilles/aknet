@@ -18,5 +18,5 @@ export function formatSampleRate(rate: number): string {
  * @returns Formatted string (e.g., "256 samples", "512 samples")
  */
 export function formatBufferSize(size: number): string {
-  return `${size} samples`;
+  return `${size}`;
 }
