@@ -208,7 +208,24 @@ namespace aknet::jack {
         std::shared_ptr<JackAudioProcessor> audio_processor_;
         std::vector<jack_port_t*> input_ports_;  // Store for callback access
 
-        // Instance callback
+        /**
+         * Pre-allocated buffer for RT callback.
+         *
+         * Stores per-channel buffer pointers during process cycle.
+         * Sized once during register_input_ports() to avoid RT allocation.
+         */
+        std::vector<const float*> input_ptrs_;
+
+        /**
+         * JACK real-time audio callback.
+         *
+         * Called by JACK's RT thread for each process cycle.
+         * Must not allocate, block, or use locks.
+         *
+         * @param nframes Number of frames to process this cycle.
+         *
+         * @return 0 on success, non-zero signals error to JACK (deactivates client).
+         */
         int process_callback(jack_nframes_t nframes);
     };
 

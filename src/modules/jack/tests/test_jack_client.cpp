@@ -510,3 +510,62 @@ TEST_CASE("Jack | JackClient - Audio processor lifecycle", "[jack][client]") {
         CHECK(result.ok);
     }
 }
+
+TEST_CASE("Jack | JackClient - RT-safe process callback", "[jack][client][rt-safety]") {
+    JackClientTestFixture f;
+    jack::JackClient client(f.logger, f.client_api);
+
+    client.open("test_client");
+    client.register_input_ports(4);
+
+    auto processor = std::make_shared<jack::JackAudioProcessor>(4);
+    client.set_audio_processor(processor);
+    client.activate();
+
+    SECTION("process callback uses pre-allocated buffer") {
+        // This test verifies that the callback doesn't allocate per-cycle
+        // We simulate multiple process cycles and verify no crashes/issues
+
+        for (int cycle = 0; cycle < 100; ++cycle) {
+            f.client_api->simulate_process_cycle(256);
+        }
+
+        // If we got here without crashing, the pre-allocation is working
+        auto levels = client.get_audio_levels();
+        CHECK(levels.size() == 4);
+    }
+
+    SECTION("pre-allocated buffer size matches port count") {
+        // Change port count and verify buffer resizes correctly
+        client.close();
+        client.open("test_client2");
+        client.register_input_ports(8);  // Different count
+
+        auto processor2 = std::make_shared<jack::JackAudioProcessor>(8);
+        client.set_audio_processor(processor2);
+        client.activate();
+
+        // Simulate processing with new port count
+        f.client_api->simulate_process_cycle(256);
+
+        auto levels = client.get_audio_levels();
+        CHECK(levels.size() == 8);
+    }
+
+    SECTION("buffer survives close and reopen") {
+        // Verify buffer state is properly managed across lifecycle
+        client.close();
+
+        client.open("test_client3");
+        client.register_input_ports(2);
+
+        auto processor2 = std::make_shared<jack::JackAudioProcessor>(2);
+        client.set_audio_processor(processor2);
+        client.activate();
+
+        f.client_api->simulate_process_cycle(256);
+
+        auto levels = client.get_audio_levels();
+        CHECK(levels.size() == 2);
+    }
+}

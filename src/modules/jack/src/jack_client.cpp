@@ -73,6 +73,9 @@ namespace aknet::jack {
         input_port_count_ = count;
         input_ports_ = client_api_->get_input_ports();
 
+        // Pre-allocate RT buffer
+        input_ptrs_.resize(input_ports_.size());
+
         return result;
     }
 
@@ -114,6 +117,7 @@ namespace aknet::jack {
         client_name_.clear();
         input_port_count_ = 0;
         input_ports_.clear();
+        input_ptrs_.clear();
         audio_processor_.reset();
 
         return result;
@@ -173,24 +177,20 @@ namespace aknet::jack {
             return 1;  // Error: deactivate client
         }
 
-        // Get buffer pointers from JACK ports
-        std::vector<const float*> buffers;
-        buffers.reserve(input_ports_.size());
-
-        for (auto* port : input_ports_) {
+        // Fill pre-allocated buffer with pointers (RT-safe: no allocation)
+        for (size_t i = 0; i < input_ports_.size(); ++i) {
             // jack_port_get_buffer() can return NULL if something is wrong
-            void* buffer_raw = jack_port_get_buffer(port, nframes);
+            void* buffer_raw = jack_port_get_buffer(input_ports_[i], nframes);
             if (!buffer_raw) {
                 logger_->error("jack_port_get_buffer() returned NULL for port");
                 return 1;  // Error: deactivate client
             }
 
-            auto* buffer = static_cast<float*>(buffer_raw);
-            buffers.push_back(buffer);
+            input_ptrs_[i] = static_cast<const float*>(buffer_raw);
         }
 
         // Process audio
-        audio_processor_->process(nframes, buffers.data());
+        audio_processor_->process(nframes, input_ptrs_.data());
 
         return 0;  // Success
     }
