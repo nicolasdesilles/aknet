@@ -86,6 +86,10 @@ namespace aknet {
             [](settings::Settings*){} // no-op deleter
         );
 
+        // Initialize Audio module
+        audio_module_ = audio::create_audio_module(logger_);
+        logger_->info("Audio module created");
+
         // Initialize JACK module
         jack_module_ = std::make_shared<jack::JackModule>(logger_);
         logger_->info("JACK module created");
@@ -117,6 +121,8 @@ namespace aknet {
             bridge_->disconnect();
         }
         bridge_.reset();
+        jack_module_.reset();
+        audio_module_.reset();
 
         startup_manager_.reset();
         

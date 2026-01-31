@@ -22,6 +22,7 @@
 #include <settings.h>
 #include <startup_manager.h>
 #include <jack_module.h>
+#include <audio.h>
 
 // Saucer webview
 #include <saucer/smartview.hpp>
@@ -416,6 +417,7 @@ namespace aknet {
         std::unique_ptr<startup::StartupManager> startup_manager_;
         std::unique_ptr<bridge::EventBridge> bridge_;
         std::shared_ptr<jack::JackModule> jack_module_;
+        std::shared_ptr<audio::AudioModule> audio_module_;
 
         // Status tick loop
         std::atomic<bool> status_tick_stop_{false};

@@ -62,6 +62,7 @@ add_subdirectory(src/core)
 add_subdirectory(src/modules/startup)
 add_subdirectory(src/modules/bridge)
 add_subdirectory(src/modules/jack)
+add_subdirectory(src/modules/audio)
 
 # Utils
 add_subdirectory(src/utils/logger)
@@ -78,6 +79,7 @@ if(AKNET_BUILD_TESTS)
     add_subdirectory(src/modules/startup/tests)
     add_subdirectory(src/modules/bridge/tests)
     add_subdirectory(src/modules/jack/tests)
+    add_subdirectory(src/modules/audio/tests)
 
     add_subdirectory(src/utils/logger/tests)
     add_subdirectory(src/utils/settings/tests)
@@ -92,6 +94,7 @@ if(AKNET_BUILD_TESTS)
             ${AKNET_STARTUP_TEST_SOURCES}
             ${AKNET_BRIDGE_TEST_SOURCES}
             ${AKNET_JACK_TEST_SOURCES}
+            ${AKNET_AUDIO_TEST_SOURCES}
             ${AKNET_CORE_TEST_SOURCES}
             ${AKNET_INTEGRATION_TEST_SOURCES}
     )
@@ -107,6 +110,7 @@ if(AKNET_BUILD_TESTS)
             aknet_settings
             aknet_startup
             aknet_bridge
+            aknet_audio
             aknet_jack
             jack::jack
             nlohmann_json::nlohmann_json
